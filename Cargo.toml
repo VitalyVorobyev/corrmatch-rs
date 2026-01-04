@@ -1,0 +1,24 @@
+[package]
+name = "corrmatch"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "TODO"
+categories = ["algorithms", "multimedia::images", "science"]
+keywords = ["template-matching", "image-processing", "zncc", "pyramid", "rotation"]
+
+[dependencies]
+thiserror = "1"
+rayon = { version = "1", optional = true }
+wide = { version = "1", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg"] }
+
+[dev-dependencies]
+rand = "0.9"
+criterion = "0.8"
+
+[features]
+default = []
+rayon = ["dep:rayon"]
+simd = ["dep:wide"]
+image-io = ["dep:image"]
