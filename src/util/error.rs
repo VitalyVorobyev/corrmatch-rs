@@ -32,4 +32,14 @@ pub enum CorrMatchError {
     /// The template is degenerate and cannot be normalized.
     #[error("degenerate template: {reason}")]
     DegenerateTemplate { reason: &'static str },
+    /// The requested angle grid parameters are invalid.
+    #[error("invalid angle grid: {reason}")]
+    InvalidAngleGrid { reason: &'static str },
+    /// The requested index is out of bounds for a collection.
+    #[error("index out of bounds: {context} index={index} len={len}")]
+    IndexOutOfBounds {
+        index: usize,
+        len: usize,
+        context: &'static str,
+    },
 }
