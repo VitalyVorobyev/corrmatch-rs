@@ -31,6 +31,7 @@ Initial releases emphasize scalar kernels and clean APIs for extension.
 ## Feature policy
 - Default build must work with `--no-default-features`.
 - `rayon` and `simd` must not change results beyond documented floating tolerance.
+- Parallel search is opt-in via `MatchConfig.parallel` and must remain deterministic.
 
 ## Documentation policy
 - README shows quickstart + feature flags.

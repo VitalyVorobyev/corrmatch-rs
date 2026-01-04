@@ -1,5 +1,7 @@
 //! Top-K candidate tracking for match peaks.
 
+use std::cmp::Ordering;
+
 /// Peak candidate in image space for a specific rotation angle.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Peak {
@@ -11,6 +13,19 @@ pub struct Peak {
     pub score: f32,
     /// Index into the angle grid.
     pub angle_idx: usize,
+}
+
+fn peak_cmp_desc(a: &Peak, b: &Peak) -> Ordering {
+    b.score
+        .total_cmp(&a.score)
+        .then_with(|| a.y.cmp(&b.y))
+        .then_with(|| a.x.cmp(&b.x))
+        .then_with(|| a.angle_idx.cmp(&b.angle_idx))
+}
+
+/// Sorts peaks by descending score with deterministic tie-breaking.
+pub(crate) fn sort_peaks_desc(peaks: &mut [Peak]) {
+    peaks.sort_by(peak_cmp_desc);
 }
 
 /// Top-K container with O(k) insertion cost.
@@ -38,24 +53,21 @@ impl TopK<Peak> {
             return;
         }
 
-        let mut min_idx = 0usize;
-        let mut min_score = self.items[0].score;
+        let mut worst_idx = 0usize;
         for (idx, item) in self.items.iter().enumerate().skip(1) {
-            if item.score < min_score {
-                min_score = item.score;
-                min_idx = idx;
+            if peak_cmp_desc(item, &self.items[worst_idx]) == Ordering::Greater {
+                worst_idx = idx;
             }
         }
 
-        if peak.score > min_score {
-            self.items[min_idx] = peak;
+        if peak_cmp_desc(&peak, &self.items[worst_idx]) == Ordering::Less {
+            self.items[worst_idx] = peak;
         }
     }
 
     /// Returns peaks sorted by descending score.
     pub fn into_sorted_desc(mut self) -> Vec<Peak> {
-        self.items
-            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        sort_peaks_desc(&mut self.items);
         self.items
     }
 }

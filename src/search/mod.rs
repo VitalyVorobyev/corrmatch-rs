@@ -9,10 +9,14 @@ pub(crate) mod scan;
 use crate::bank::CompiledTemplate;
 use crate::image::pyramid::ImagePyramid;
 use crate::search::coarse::{coarse_search_level, coarse_search_level_unmasked};
+#[cfg(feature = "rayon")]
+use crate::search::coarse::{coarse_search_level_par, coarse_search_level_unmasked_par};
 use crate::search::refine::{
     refine_final_match, refine_final_match_unmasked, refine_to_finer_level,
     refine_to_finer_level_unmasked,
 };
+#[cfg(feature = "rayon")]
+use crate::search::refine::{refine_to_finer_level_par, refine_to_finer_level_unmasked_par};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
@@ -41,6 +45,10 @@ pub struct MatchConfig {
     pub metric: Metric,
     /// Whether rotation search is enabled.
     pub rotation: RotationMode,
+    /// Enables parallel search when the `rayon` feature is available.
+    ///
+    /// When the feature is disabled, this flag is ignored and execution stays sequential.
+    pub parallel: bool,
     /// Maximum pyramid levels to build for the image.
     pub max_image_levels: usize,
     /// Beam width kept per level after merge and NMS.
@@ -66,6 +74,7 @@ impl Default for MatchConfig {
         Self {
             metric: Metric::Zncc,
             rotation: RotationMode::Disabled,
+            parallel: false,
             max_image_levels: 6,
             beam_width: 8,
             per_angle_topk: 3,
@@ -75,6 +84,12 @@ impl Default for MatchConfig {
             min_var_i: 1e-8,
             min_score: f32::NEG_INFINITY,
         }
+    }
+}
+
+impl MatchConfig {
+    pub(crate) fn use_parallel(&self) -> bool {
+        self.parallel && cfg!(feature = "rayon")
     }
 }
 
@@ -120,6 +135,7 @@ impl Matcher {
             return Err(CorrMatchError::UnsupportedMetric { metric: "ssd" });
         }
 
+        let use_parallel = self.cfg.use_parallel();
         let pyramid = ImagePyramid::build_u8(image, self.cfg.max_image_levels)?;
         let num_levels = pyramid.levels().len().min(self.compiled.num_levels());
         if num_levels == 0 {
@@ -139,10 +155,42 @@ impl Matcher {
             })?;
         let mut seeds = match self.cfg.rotation {
             RotationMode::Enabled => {
-                coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                if use_parallel {
+                    #[cfg(feature = "rayon")]
+                    {
+                        coarse_search_level_par(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                    }
+                    #[cfg(not(feature = "rayon"))]
+                    {
+                        coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                    }
+                } else {
+                    coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                }
             }
             RotationMode::Disabled => {
-                coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                if use_parallel {
+                    #[cfg(feature = "rayon")]
+                    {
+                        coarse_search_level_unmasked_par(
+                            coarse_view,
+                            &self.compiled,
+                            coarsest,
+                            &self.cfg,
+                        )?
+                    }
+                    #[cfg(not(feature = "rayon"))]
+                    {
+                        coarse_search_level_unmasked(
+                            coarse_view,
+                            &self.compiled,
+                            coarsest,
+                            &self.cfg,
+                        )?
+                    }
+                } else {
+                    coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                }
             }
         };
         if seeds.is_empty() {
@@ -161,15 +209,63 @@ impl Matcher {
                 })?;
             seeds = match self.cfg.rotation {
                 RotationMode::Enabled => {
-                    refine_to_finer_level(level_view, &self.compiled, level, &seeds, &self.cfg)?
+                    if use_parallel {
+                        #[cfg(feature = "rayon")]
+                        {
+                            refine_to_finer_level_par(
+                                level_view,
+                                &self.compiled,
+                                level,
+                                &seeds,
+                                &self.cfg,
+                            )?
+                        }
+                        #[cfg(not(feature = "rayon"))]
+                        {
+                            refine_to_finer_level(
+                                level_view,
+                                &self.compiled,
+                                level,
+                                &seeds,
+                                &self.cfg,
+                            )?
+                        }
+                    } else {
+                        refine_to_finer_level(level_view, &self.compiled, level, &seeds, &self.cfg)?
+                    }
                 }
-                RotationMode::Disabled => refine_to_finer_level_unmasked(
-                    level_view,
-                    &self.compiled,
-                    level,
-                    &seeds,
-                    &self.cfg,
-                )?,
+                RotationMode::Disabled => {
+                    if use_parallel {
+                        #[cfg(feature = "rayon")]
+                        {
+                            refine_to_finer_level_unmasked_par(
+                                level_view,
+                                &self.compiled,
+                                level,
+                                &seeds,
+                                &self.cfg,
+                            )?
+                        }
+                        #[cfg(not(feature = "rayon"))]
+                        {
+                            refine_to_finer_level_unmasked(
+                                level_view,
+                                &self.compiled,
+                                level,
+                                &seeds,
+                                &self.cfg,
+                            )?
+                        }
+                    } else {
+                        refine_to_finer_level_unmasked(
+                            level_view,
+                            &self.compiled,
+                            level,
+                            &seeds,
+                            &self.cfg,
+                        )?
+                    }
+                }
             };
             if seeds.is_empty() {
                 return Err(CorrMatchError::NoCandidates {

@@ -1,6 +1,6 @@
 //! Non-maximum suppression utilities for candidates.
 
-use crate::candidate::topk::Peak;
+use crate::candidate::topk::{sort_peaks_desc, Peak};
 
 /// Applies 2D non-maximum suppression using Chebyshev distance.
 ///
@@ -8,11 +8,11 @@ use crate::candidate::topk::Peak;
 /// `radius` in Chebyshev distance from all previously kept peaks.
 pub fn nms_2d(peaks: &mut [Peak], radius: usize) -> Vec<Peak> {
     if radius == 0 {
-        peaks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        sort_peaks_desc(peaks);
         return peaks.to_owned();
     }
 
-    peaks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+    sort_peaks_desc(peaks);
     let mut kept: Vec<Peak> = Vec::new();
 
     'outer: for peak in peaks.iter().copied() {
