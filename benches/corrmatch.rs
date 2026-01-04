@@ -1,4 +1,4 @@
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
+use corrmatch::bank::{CompileConfig, CompileConfigNoRot, CompiledTemplate};
 use corrmatch::search::{MatchConfig, Matcher, Metric, RotationMode};
 use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{ImageView, Template};
@@ -47,17 +47,9 @@ fn bench_matcher(c: &mut Criterion) {
     let tpl_data = extract_patch(&image, img_width, tpl_x0, tpl_y0, tpl_width, tpl_height);
     let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
 
-    let compiled_unmasked = CompiledTemplate::compile(
-        &template,
-        CompileConfig {
-            max_levels: 4,
-            coarse_step_deg: 45.0,
-            min_step_deg: 45.0,
-            fill_value: 0,
-            precompute_coarsest: true,
-        },
-    )
-    .unwrap();
+    let compiled_unmasked =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 4 })
+            .unwrap();
     let matcher_unmasked = Matcher::new(compiled_unmasked).with_config(MatchConfig {
         metric: Metric::Zncc,
         rotation: RotationMode::Disabled,
@@ -76,17 +68,8 @@ fn bench_matcher(c: &mut Criterion) {
     });
 
     let matcher_ssd_unmasked = Matcher::new(
-        CompiledTemplate::compile(
-            &template,
-            CompileConfig {
-                max_levels: 4,
-                coarse_step_deg: 45.0,
-                min_step_deg: 45.0,
-                fill_value: 0,
-                precompute_coarsest: true,
-            },
-        )
-        .unwrap(),
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 4 })
+            .unwrap(),
     )
     .with_config(MatchConfig {
         metric: Metric::Ssd,
@@ -101,23 +84,14 @@ fn bench_matcher(c: &mut Criterion) {
         ..MatchConfig::default()
     });
 
-    c.bench_function("ssd_unmasked_rotation_off_placeholder", |b| {
-        b.iter(|| black_box(matcher_ssd_unmasked.match_image(image_view).err()));
+    c.bench_function("ssd_unmasked_rotation_off", |b| {
+        b.iter(|| black_box(matcher_ssd_unmasked.match_image(image_view).unwrap()));
     });
 
     if cfg!(feature = "rayon") {
         let matcher_unmasked_par = Matcher::new(
-            CompiledTemplate::compile(
-                &template,
-                CompileConfig {
-                    max_levels: 4,
-                    coarse_step_deg: 45.0,
-                    min_step_deg: 45.0,
-                    fill_value: 0,
-                    precompute_coarsest: true,
-                },
-            )
-            .unwrap(),
+            CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 4 })
+                .unwrap(),
         )
         .with_config(MatchConfig {
             metric: Metric::Zncc,
@@ -151,7 +125,7 @@ fn bench_matcher(c: &mut Criterion) {
     }
     let image_rot_view = ImageView::from_slice(&image_rot, img_width, img_height).unwrap();
 
-    let compiled_rot = CompiledTemplate::compile(
+    let compiled_rot = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 4,
@@ -180,7 +154,7 @@ fn bench_matcher(c: &mut Criterion) {
     });
 
     let matcher_ssd_rot = Matcher::new(
-        CompiledTemplate::compile(
+        CompiledTemplate::compile_rotated(
             &template,
             CompileConfig {
                 max_levels: 4,
@@ -205,13 +179,13 @@ fn bench_matcher(c: &mut Criterion) {
         ..MatchConfig::default()
     });
 
-    c.bench_function("ssd_masked_rotation_on_placeholder", |b| {
-        b.iter(|| black_box(matcher_ssd_rot.match_image(image_rot_view).err()));
+    c.bench_function("ssd_masked_rotation_on", |b| {
+        b.iter(|| black_box(matcher_ssd_rot.match_image(image_rot_view).unwrap()));
     });
 
     if cfg!(feature = "rayon") {
         let matcher_rot_par = Matcher::new(
-            CompiledTemplate::compile(
+            CompiledTemplate::compile_rotated(
                 &template,
                 CompileConfig {
                     max_levels: 4,

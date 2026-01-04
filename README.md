@@ -1,8 +1,8 @@
 # corrmatch
 
-CorrMatch is a CPU-first template matching crate focused on ZNCC scoring across
-image pyramids with hierarchical rotation search. The goal is deterministic,
-reproducible matching with a minimal dependency footprint.
+CorrMatch is a CPU-first template matching crate focused on ZNCC/SSD scoring
+across image pyramids with hierarchical rotation search. The goal is
+deterministic, reproducible matching with a minimal dependency footprint.
 
 ## Feature flags
 - `rayon`: parallel search execution (off by default).
@@ -10,7 +10,7 @@ reproducible matching with a minimal dependency footprint.
 - `image-io`: enable `image` crate helpers for examples (off by default).
 
 ## Search options
-- `Metric::Zncc` is supported today; `Metric::Ssd` is scaffolded but not implemented.
+- `Metric::Zncc` and `Metric::Ssd` are supported.
 - `RotationMode::Disabled` (default) uses the unmasked fast path; enable rotation
   when you need angle search.
 - `MatchConfig.parallel` enables rayon-backed parallel search when the feature
@@ -18,7 +18,7 @@ reproducible matching with a minimal dependency footprint.
 
 ## Current building blocks
 ```rust
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
+use corrmatch::bank::{CompileConfig, CompileConfigNoRot, CompiledTemplate};
 use corrmatch::search::{MatchConfig, Matcher, RotationMode};
 use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{
@@ -46,7 +46,7 @@ fn compile_template(
     tpl_height: usize,
 ) -> CorrMatchResult<CompiledTemplate> {
     let template = Template::new(tpl, tpl_width, tpl_height)?;
-    CompiledTemplate::compile(&template, CompileConfig::default())
+    CompiledTemplate::compile_rotated(&template, CompileConfig::default())
 }
 
 fn match_template(
@@ -58,7 +58,7 @@ fn match_template(
     tpl_height: usize,
 ) -> CorrMatchResult<corrmatch::Match> {
     let template = Template::new(tpl, tpl_width, tpl_height)?;
-    let compiled = CompiledTemplate::compile(&template, CompileConfig::default())?;
+    let compiled = CompiledTemplate::compile_rotated(&template, CompileConfig::default())?;
     let matcher = Matcher::new(compiled).with_config(MatchConfig {
         rotation: RotationMode::Enabled,
         ..MatchConfig::default()
@@ -84,6 +84,16 @@ fn scan_one_angle(
 }
 ```
 
+If you do not need rotation support, compile a lighter template:
+```rust
+# use corrmatch::bank::{CompileConfigNoRot, CompiledTemplate};
+# use corrmatch::{CorrMatchResult, Template};
+# fn compile_no_rot(tpl: Vec<u8>, w: usize, h: usize) -> CorrMatchResult<CompiledTemplate> {
+let template = Template::new(tpl, w, h)?;
+CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot::default())
+# }
+```
+
 ## Planned API sketch
 ```rust
 use corrmatch::CorrMatchResult;
@@ -96,8 +106,8 @@ use corrmatch::CorrMatchResult;
 
 ## Status
 Core data types, compiled template assets, a coarse-to-fine matcher, and
-subpixel/subangle refinement are implemented; higher-level APIs and
-SIMD/parallel acceleration are pending.
+subpixel/subangle refinement are implemented; SIMD acceleration and broader
+API ergonomics are pending.
 
 ## Benchmarks
 Run the benchmark suite with:

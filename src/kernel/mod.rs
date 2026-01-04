@@ -6,16 +6,20 @@ use crate::ImageView;
 
 /// Scan configuration for kernel evaluations.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ScanParams {
-    pub(crate) topk: usize,
-    pub(crate) min_var_i: f32,
-    pub(crate) min_score: f32,
+pub struct ScanParams {
+    /// Maximum number of peaks to retain.
+    pub topk: usize,
+    /// Minimum variance threshold for the image window (ZNCC only).
+    pub min_var_i: f32,
+    /// Minimum score threshold (discard below this value).
+    pub min_score: f32,
 }
 
 /// Kernel trait for scoring and scan operations.
-pub(crate) trait Kernel {
+pub trait Kernel {
     type Plan;
 
+    /// Computes the score at a single placement (top-left coordinates).
     fn score_at(
         image: ImageView<'_, u8>,
         plan: &Self::Plan,
@@ -24,6 +28,7 @@ pub(crate) trait Kernel {
         min_var_i: f32,
     ) -> f32;
 
+    /// Scans the full valid placement range and returns top-K peaks.
     fn scan_full(
         image: ImageView<'_, u8>,
         plan: &Self::Plan,
@@ -31,6 +36,7 @@ pub(crate) trait Kernel {
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>>;
 
+    /// Scans an ROI of placement coordinates and returns top-K peaks.
     #[allow(clippy::too_many_arguments)]
     fn scan_roi(
         image: ImageView<'_, u8>,
@@ -44,10 +50,10 @@ pub(crate) trait Kernel {
     ) -> CorrMatchResult<Vec<Peak>>;
 }
 
-pub(crate) mod scalar;
+pub mod scalar;
 
 #[cfg(feature = "simd")]
-pub(crate) mod simd;
+pub mod simd;
 
 #[cfg(feature = "rayon")]
-pub(crate) mod rayon;
+pub mod rayon;

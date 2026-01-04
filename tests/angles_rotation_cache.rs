@@ -70,12 +70,12 @@ fn compiled_template_caches_rotations() {
         fill_value: 0,
         precompute_coarsest: true,
     };
-    let compiled = CompiledTemplate::compile(&template, cfg).unwrap();
+    let compiled = CompiledTemplate::compile_rotated(&template, cfg).unwrap();
 
     let grid = compiled.angle_grid(0).unwrap();
     let idx = grid.nearest_index(0.0);
-    let first = compiled.rotated_plan(0, idx).unwrap();
-    let second = compiled.rotated_plan(0, idx).unwrap();
+    let first = compiled.rotated_zncc_plan(0, idx).unwrap();
+    let second = compiled.rotated_zncc_plan(0, idx).unwrap();
 
     assert_eq!(first.width(), width);
     assert_eq!(first.height(), height);
@@ -85,7 +85,7 @@ fn compiled_template_caches_rotations() {
 
     let grid1 = compiled.angle_grid(1).unwrap();
     let idx1 = grid1.nearest_index(45.0);
-    let plan1 = compiled.rotated_plan(1, idx1).unwrap();
+    let plan1 = compiled.rotated_zncc_plan(1, idx1).unwrap();
     assert_eq!(plan1.width(), width / 2);
     assert_eq!(plan1.height(), height / 2);
 }

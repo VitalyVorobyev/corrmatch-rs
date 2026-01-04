@@ -1,6 +1,6 @@
 //! Search strategies for locating template matches.
 //!
-//! The scan module provides baseline scalar ZNCC evaluation.
+//! The scan module provides baseline scalar ZNCC evaluation helpers.
 
 mod coarse;
 mod refine;
@@ -20,12 +20,12 @@ use crate::search::refine::{refine_to_finer_level_par, refine_to_finer_level_unm
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
-/// Matching metric selector (SSD is planned but not implemented).
+/// Matching metric selector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
     /// Zero-mean normalized cross-correlation.
     Zncc,
-    /// Sum of squared differences (placeholder).
+    /// Sum of squared differences.
     Ssd,
 }
 
@@ -64,6 +64,8 @@ pub struct MatchConfig {
     /// Ignored when rotation is disabled.
     pub angle_half_range_steps: usize,
     /// Minimum variance for image patches.
+    ///
+    /// Ignored for SSD.
     pub min_var_i: f32,
     /// Minimum score threshold (discard below this value).
     pub min_score: f32,
@@ -102,7 +104,7 @@ pub struct Match {
     pub y: f32,
     /// Estimated rotation angle in degrees.
     pub angle_deg: f32,
-    /// Masked ZNCC score for the best match.
+    /// Score for the chosen metric (ZNCC in [-1, 1], SSD as negative SSE).
     pub score: f32,
 }
 
@@ -131,8 +133,12 @@ impl Matcher {
     ///
     /// When rotation is disabled, angle-related settings are ignored.
     pub fn match_image(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Match> {
-        if self.cfg.metric != Metric::Zncc {
-            return Err(CorrMatchError::UnsupportedMetric { metric: "ssd" });
+        if matches!(self.compiled, CompiledTemplate::Unrotated(_))
+            && self.cfg.rotation == RotationMode::Enabled
+        {
+            return Err(CorrMatchError::RotationUnavailable {
+                reason: "rotation enabled but template compiled without angle banks",
+            });
         }
 
         let use_parallel = self.cfg.use_parallel();

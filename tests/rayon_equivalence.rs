@@ -41,7 +41,7 @@ fn parallel_matches_sequential_rotation_enabled() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 2,
@@ -76,7 +76,7 @@ fn parallel_matches_sequential_rotation_enabled() {
     };
     let seq_matcher = Matcher::new(compiled).with_config(seq_cfg);
     let par_matcher = Matcher::new(
-        CompiledTemplate::compile(
+        CompiledTemplate::compile_rotated(
             &template,
             CompileConfig {
                 max_levels: 2,
