@@ -7,7 +7,7 @@ mod candidate;
 pub mod image;
 mod kernel;
 mod refine;
-mod search;
+pub mod search;
 pub mod template;
 pub mod util;
 
@@ -18,4 +18,7 @@ pub use util::{CorrMatchError, CorrMatchResult};
 
 pub use candidate::nms::nms_2d;
 pub use candidate::topk::{Peak, TopK};
-pub use search::scan::scan_masked_zncc_scalar;
+pub use search::scan::{
+    scan_masked_zncc_scalar, scan_masked_zncc_scalar_full, scan_masked_zncc_scalar_roi,
+};
+pub use search::{Match, MatchConfig, Matcher};

@@ -12,6 +12,7 @@ reproducible matching with a minimal dependency footprint.
 ## Current building blocks
 ```rust
 use corrmatch::bank::{CompileConfig, CompiledTemplate};
+use corrmatch::search::{MatchConfig, Matcher};
 use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{
     scan_masked_zncc_scalar, CorrMatchResult, ImagePyramid, ImageView,
@@ -39,6 +40,21 @@ fn compile_template(
 ) -> CorrMatchResult<CompiledTemplate> {
     let template = Template::new(tpl, tpl_width, tpl_height)?;
     CompiledTemplate::compile(&template, CompileConfig::default())
+}
+
+fn match_template(
+    image: &[u8],
+    width: usize,
+    height: usize,
+    tpl: Vec<u8>,
+    tpl_width: usize,
+    tpl_height: usize,
+) -> CorrMatchResult<corrmatch::Match> {
+    let template = Template::new(tpl, tpl_width, tpl_height)?;
+    let compiled = CompiledTemplate::compile(&template, CompileConfig::default())?;
+    let matcher = Matcher::new(compiled).with_config(MatchConfig::default());
+    let image_view = ImageView::from_slice(image, width, height)?;
+    matcher.match_image(image_view)
 }
 
 fn scan_one_angle(
@@ -69,5 +85,5 @@ use corrmatch::CorrMatchResult;
 ```
 
 ## Status
-Core data types, compiled template assets, and a baseline masked ZNCC scan are
-implemented; multi-angle search and refinement are not implemented yet.
+Core data types, compiled template assets, and a baseline coarse-to-fine matcher
+are implemented; higher-level APIs and SIMD/parallel acceleration are pending.
