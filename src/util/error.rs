@@ -51,4 +51,7 @@ pub enum CorrMatchError {
     /// Rotation assets are unavailable for the requested operation.
     #[error("rotation unavailable: {reason}")]
     RotationUnavailable { reason: &'static str },
+    /// Image I/O failed.
+    #[error("image io error: {reason}")]
+    ImageIo { reason: String },
 }

@@ -4,6 +4,7 @@
 //! for each discrete rotation angle, then merges and prunes candidates.
 
 use crate::bank::CompiledTemplate;
+use crate::candidate::nms::nms_2d;
 use crate::kernel::scalar::{
     SsdMaskedScalar, SsdUnmaskedScalar, ZnccMaskedScalar, ZnccUnmaskedScalar,
 };
@@ -61,7 +62,7 @@ pub(crate) fn coarse_search_level(
         .copied()
         .map(Candidate::to_peak)
         .collect();
-    let mut kept = crate::nms_2d(&mut peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -101,7 +102,7 @@ pub(crate) fn coarse_search_level_unmasked(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -157,7 +158,7 @@ pub(crate) fn coarse_search_level_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -198,7 +199,7 @@ pub(crate) fn coarse_search_level_unmasked_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }

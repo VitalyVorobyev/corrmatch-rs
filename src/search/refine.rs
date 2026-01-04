@@ -4,6 +4,7 @@
 //! ROI and angle neighborhood to improve position and angle estimates.
 
 use crate::bank::CompiledTemplate;
+use crate::candidate::nms::nms_2d;
 use crate::candidate::topk::Peak;
 use crate::kernel::scalar::{
     SsdMaskedScalar, SsdUnmaskedScalar, ZnccMaskedScalar, ZnccUnmaskedScalar,
@@ -164,7 +165,7 @@ pub(crate) fn refine_to_finer_level(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -258,7 +259,7 @@ pub(crate) fn refine_to_finer_level_unmasked(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -365,7 +366,7 @@ pub(crate) fn refine_to_finer_level_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -467,7 +468,7 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }

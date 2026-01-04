@@ -1,5 +1,6 @@
 //! Template storage and planning utilities.
 
+use crate::bank::{CompileConfig, CompiledTemplate};
 use crate::image::{ImageView, OwnedImage};
 use crate::util::CorrMatchResult;
 
@@ -23,5 +24,10 @@ impl Template {
     /// Returns a borrowed view of the template data.
     pub fn view(&self) -> ImageView<'_, u8> {
         self.img.view()
+    }
+
+    /// Compiles template assets for matching with rotation support.
+    pub fn compile(&self, cfg: CompileConfig) -> CorrMatchResult<CompiledTemplate> {
+        CompiledTemplate::compile_rotated(self, cfg)
     }
 }

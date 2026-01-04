@@ -1,4 +1,5 @@
-use corrmatch::{CorrMatchError, ImagePyramid, ImageView, Template, TemplatePlan};
+use corrmatch::lowlevel::TemplatePlan;
+use corrmatch::{CorrMatchError, ImagePyramid, ImageView, Template};
 
 #[test]
 fn image_view_rejects_invalid_dimensions() {

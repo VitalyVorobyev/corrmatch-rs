@@ -10,6 +10,8 @@
 
 use crate::util::{CorrMatchError, CorrMatchResult};
 
+#[cfg(feature = "image-io")]
+pub mod io;
 pub mod pyramid;
 
 /// Borrowed 2D image view with an explicit stride.

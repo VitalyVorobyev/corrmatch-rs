@@ -257,3 +257,42 @@ fn pipeline_finds_translation_match_ssd_rotation_disabled() {
     assert!((best.y - y0 as f32).abs() <= 1.0);
     assert!(best.score >= -1e-6);
 }
+
+#[test]
+fn pipeline_topk_returns_best_first() {
+    let tpl_width = 24;
+    let tpl_height = 18;
+    let tpl_data = make_template(tpl_width, tpl_height);
+    let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
+
+    let img_width = 120;
+    let img_height = 90;
+    let x0 = 19;
+    let y0 = 23;
+    let mut image = vec![0u8; img_width * img_height];
+    for y in 0..tpl_height {
+        for x in 0..tpl_width {
+            image[(y0 + y) * img_width + (x0 + x)] = tpl_data[y * tpl_width + x];
+        }
+    }
+
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 3 })
+            .unwrap();
+    let cfg = MatchConfig {
+        max_image_levels: 3,
+        rotation: RotationMode::Disabled,
+        ..MatchConfig::default()
+    };
+    let matcher = Matcher::new(compiled).with_config(cfg);
+    let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+
+    let best = matcher.match_image(image_view).unwrap();
+    let topk = matcher.match_image_topk(image_view, 3).unwrap();
+
+    assert!(!topk.is_empty());
+    assert!((topk[0].x - best.x).abs() < 1e-6);
+    assert!((topk[0].y - best.y).abs() < 1e-6);
+    assert!((topk[0].angle_deg - best.angle_deg).abs() < 1e-6);
+    assert!((topk[0].score - best.score).abs() < 1e-6);
+}

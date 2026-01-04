@@ -13,7 +13,7 @@ use crate::search::coarse::{coarse_search_level, coarse_search_level_unmasked};
 use crate::search::coarse::{coarse_search_level_par, coarse_search_level_unmasked_par};
 use crate::search::refine::{
     refine_final_match, refine_final_match_unmasked, refine_to_finer_level,
-    refine_to_finer_level_unmasked,
+    refine_to_finer_level_unmasked, Candidate,
 };
 #[cfg(feature = "rayon")]
 use crate::search::refine::{refine_to_finer_level_par, refine_to_finer_level_unmasked_par};
@@ -133,6 +133,59 @@ impl Matcher {
     ///
     /// When rotation is disabled, angle-related settings are ignored.
     pub fn match_image(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Match> {
+        let seeds = self.match_candidates(image)?;
+        let best = seeds[0];
+        let refined = match self.cfg.rotation {
+            RotationMode::Enabled => refine_final_match(image, &self.compiled, 0, best, &self.cfg),
+            RotationMode::Disabled => {
+                refine_final_match_unmasked(image, &self.compiled, 0, best, &self.cfg)
+            }
+        };
+        Ok(refined.unwrap_or(Match {
+            x: best.x as f32,
+            y: best.y as f32,
+            angle_deg: best.angle_deg,
+            score: best.score,
+        }))
+    }
+
+    /// Matches a template against an image and returns up to `k` best candidates.
+    ///
+    /// Results are returned in descending score order and include the same
+    /// refinement steps as `match_image`.
+    pub fn match_image_topk(
+        &self,
+        image: ImageView<'_, u8>,
+        k: usize,
+    ) -> CorrMatchResult<Vec<Match>> {
+        if k == 0 {
+            return Ok(Vec::new());
+        }
+
+        let seeds = self.match_candidates(image)?;
+        let limit = k.min(seeds.len());
+        let mut out = Vec::with_capacity(limit);
+        for cand in seeds.into_iter().take(limit) {
+            let refined = match self.cfg.rotation {
+                RotationMode::Enabled => {
+                    refine_final_match(image, &self.compiled, 0, cand, &self.cfg)
+                }
+                RotationMode::Disabled => {
+                    refine_final_match_unmasked(image, &self.compiled, 0, cand, &self.cfg)
+                }
+            };
+            out.push(refined.unwrap_or(Match {
+                x: cand.x as f32,
+                y: cand.y as f32,
+                angle_deg: cand.angle_deg,
+                score: cand.score,
+            }));
+        }
+
+        Ok(out)
+    }
+
+    fn match_candidates(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Vec<Candidate>> {
         if matches!(self.compiled, CompiledTemplate::Unrotated(_))
             && self.cfg.rotation == RotationMode::Enabled
         {
@@ -280,18 +333,6 @@ impl Matcher {
             }
         }
 
-        let best = seeds[0];
-        let refined = match self.cfg.rotation {
-            RotationMode::Enabled => refine_final_match(image, &self.compiled, 0, best, &self.cfg),
-            RotationMode::Disabled => {
-                refine_final_match_unmasked(image, &self.compiled, 0, best, &self.cfg)
-            }
-        };
-        Ok(refined.unwrap_or(Match {
-            x: best.x as f32,
-            y: best.y as f32,
-            angle_deg: best.angle_deg,
-            score: best.score,
-        }))
+        Ok(seeds)
     }
 }
