@@ -1,5 +1,5 @@
 use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher};
+use corrmatch::search::{MatchConfig, Matcher, RotationMode};
 use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{ImageView, Template};
 
@@ -71,6 +71,7 @@ fn pipeline_finds_rotated_match() {
         roi_radius: 8,
         nms_radius: 6,
         angle_half_range_steps: 1,
+        rotation: RotationMode::Enabled,
         ..MatchConfig::default()
     };
     let matcher = Matcher::new(compiled).with_config(cfg);
@@ -133,6 +134,7 @@ fn pipeline_finds_translation_match() {
         roi_radius: 6,
         nms_radius: 4,
         angle_half_range_steps: 1,
+        rotation: RotationMode::Enabled,
         ..MatchConfig::default()
     };
     let matcher = Matcher::new(compiled).with_config(cfg);
@@ -172,4 +174,53 @@ fn angle_step_schedule_matches_expected() {
     assert!((step2 - 20.0).abs() < 1e-6);
     assert!((step1 - 10.0).abs() < 1e-6);
     assert!((step0 - 5.0).abs() < 1e-6);
+}
+
+#[test]
+fn pipeline_finds_translation_match_rotation_disabled() {
+    let tpl_width = 32;
+    let tpl_height = 24;
+    let tpl_data = make_template(tpl_width, tpl_height);
+    let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
+
+    let img_width = 140;
+    let img_height = 110;
+    let x0 = 21;
+    let y0 = 17;
+    let mut image = vec![0u8; img_width * img_height];
+    for y in 0..tpl_height {
+        for x in 0..tpl_width {
+            image[(y0 + y) * img_width + (x0 + x)] = tpl_data[y * tpl_width + x];
+        }
+    }
+
+    let compiled = CompiledTemplate::compile(
+        &template,
+        CompileConfig {
+            max_levels: 3,
+            coarse_step_deg: 45.0,
+            min_step_deg: 45.0,
+            fill_value: 0,
+            precompute_coarsest: true,
+        },
+    )
+    .unwrap();
+
+    let cfg = MatchConfig {
+        max_image_levels: 3,
+        beam_width: 5,
+        per_angle_topk: 3,
+        roi_radius: 6,
+        nms_radius: 4,
+        rotation: RotationMode::Disabled,
+        ..MatchConfig::default()
+    };
+    let matcher = Matcher::new(compiled).with_config(cfg);
+    let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+    let best = matcher.match_image(image_view).unwrap();
+
+    assert!((best.x - x0 as f32).abs() <= 1.0);
+    assert!((best.y - y0 as f32).abs() <= 1.0);
+    assert!(angle_diff_deg(best.angle_deg, 0.0) <= 1e-6);
+    assert!(best.score > 0.99);
 }

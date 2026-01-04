@@ -14,7 +14,7 @@ pub use angles::AngleGrid;
 use crate::image::pyramid::ImagePyramid;
 use crate::image::OwnedImage;
 use crate::template::rotate::rotate_u8_bilinear_masked;
-use crate::template::{MaskedTemplatePlan, Template};
+use crate::template::{MaskedTemplatePlan, Template, TemplatePlan};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use std::sync::OnceLock;
 
@@ -65,6 +65,7 @@ struct LevelBank {
 pub struct CompiledTemplate {
     levels: Vec<OwnedImage>,
     banks: Vec<LevelBank>,
+    unmasked: Vec<TemplatePlan>,
     cfg: CompileConfig,
 }
 
@@ -73,6 +74,11 @@ impl CompiledTemplate {
     pub fn compile(tpl: &Template, cfg: CompileConfig) -> CorrMatchResult<Self> {
         let pyramid = ImagePyramid::build_u8(tpl.view(), cfg.max_levels)?;
         let levels = pyramid.into_levels();
+
+        let mut unmasked = Vec::with_capacity(levels.len());
+        for level in levels.iter() {
+            unmasked.push(TemplatePlan::from_view(level.view())?);
+        }
 
         let mut banks = Vec::with_capacity(levels.len());
         let coarsest_idx = levels.len().saturating_sub(1);
@@ -109,7 +115,12 @@ impl CompiledTemplate {
             }
         }
 
-        Ok(Self { levels, banks, cfg })
+        Ok(Self {
+            levels,
+            banks,
+            unmasked,
+            cfg,
+        })
     }
 
     /// Returns the number of pyramid levels.
@@ -136,6 +147,17 @@ impl CompiledTemplate {
         angle_idx: usize,
     ) -> CorrMatchResult<&MaskedTemplatePlan> {
         Ok(&self.rotated(level, angle_idx)?.plan)
+    }
+
+    /// Returns an unmasked template plan for a given level.
+    pub(crate) fn unmasked_plan(&self, level: usize) -> CorrMatchResult<&TemplatePlan> {
+        self.unmasked
+            .get(level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: level,
+                len: self.unmasked.len(),
+                context: "level",
+            })
     }
 
     pub(crate) fn rotated(

@@ -9,10 +9,15 @@ reproducible matching with a minimal dependency footprint.
 - `simd`: SIMD-accelerated kernels via `wide` (off by default).
 - `image-io`: enable `image` crate helpers for examples (off by default).
 
+## Search options
+- `Metric::Zncc` is supported today; `Metric::Ssd` is scaffolded but not implemented.
+- `RotationMode::Disabled` (default) uses the unmasked fast path; enable rotation
+  when you need angle search.
+
 ## Current building blocks
 ```rust
 use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher};
+use corrmatch::search::{MatchConfig, Matcher, RotationMode};
 use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{
     scan_masked_zncc_scalar, CorrMatchResult, ImagePyramid, ImageView,
@@ -52,7 +57,10 @@ fn match_template(
 ) -> CorrMatchResult<corrmatch::Match> {
     let template = Template::new(tpl, tpl_width, tpl_height)?;
     let compiled = CompiledTemplate::compile(&template, CompileConfig::default())?;
-    let matcher = Matcher::new(compiled).with_config(MatchConfig::default());
+    let matcher = Matcher::new(compiled).with_config(MatchConfig {
+        rotation: RotationMode::Enabled,
+        ..MatchConfig::default()
+    });
     let image_view = ImageView::from_slice(image, width, height)?;
     matcher.match_image(image_view)
 }

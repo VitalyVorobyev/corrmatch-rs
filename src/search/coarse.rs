@@ -4,6 +4,8 @@
 //! for each discrete rotation angle, then merges and prunes candidates.
 
 use crate::bank::CompiledTemplate;
+use crate::kernel::scalar::ZnccUnmaskedScalar;
+use crate::kernel::{Kernel, ScanParams};
 use crate::search::refine::Candidate;
 use crate::search::scan::scan_masked_zncc_scalar_full;
 use crate::search::MatchConfig;
@@ -60,6 +62,37 @@ pub(crate) fn coarse_search_level(
     for peak in kept.drain(..) {
         let angle_deg = grid.angle_at(peak.angle_idx);
         out.push(Candidate::from_peak(level, angle_deg, peak));
+    }
+
+    Ok(out)
+}
+
+/// Coarse search without rotation using an unmasked ZNCC kernel.
+pub(crate) fn coarse_search_level_unmasked(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    level: usize,
+    cfg: &MatchConfig,
+) -> CorrMatchResult<Vec<Candidate>> {
+    let plan = compiled.unmasked_plan(level)?;
+    let params = ScanParams {
+        topk: cfg.per_angle_topk,
+        min_var_i: cfg.min_var_i,
+        min_score: cfg.min_score,
+    };
+    let mut peaks = <ZnccUnmaskedScalar as Kernel>::scan_full(image, plan, 0, params)?;
+    if peaks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut kept = crate::nms_2d(&mut peaks, cfg.nms_radius);
+    if kept.len() > cfg.beam_width {
+        kept.truncate(cfg.beam_width);
+    }
+
+    let mut out = Vec::with_capacity(kept.len());
+    for peak in kept.drain(..) {
+        out.push(Candidate::from_peak(level, 0.0, peak));
     }
 
     Ok(out)
