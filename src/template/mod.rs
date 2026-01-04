@@ -10,6 +10,8 @@ pub mod rotate;
 pub use plan::{MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, TemplatePlan};
 
 /// Owned template image in contiguous grayscale format.
+///
+/// Use `Template::compile` to build reusable assets for matching.
 pub struct Template {
     img: OwnedImage,
 }
@@ -27,6 +29,8 @@ impl Template {
     }
 
     /// Compiles template assets for matching with rotation support.
+    ///
+    /// For translation-only matching, use `CompiledTemplate::compile_unrotated`.
     pub fn compile(&self, cfg: CompileConfig) -> CorrMatchResult<CompiledTemplate> {
         CompiledTemplate::compile_rotated(self, cfg)
     }

@@ -20,7 +20,7 @@ use crate::template::{
 use crate::util::{CorrMatchError, CorrMatchResult};
 use std::sync::{Arc, OnceLock};
 
-/// Configuration for compiling template assets.
+/// Configuration for compiling template assets with rotation support.
 #[derive(Clone, Debug)]
 pub struct CompileConfig {
     /// Maximum pyramid levels to build.
@@ -308,6 +308,10 @@ impl CompiledTemplateNoRot {
 }
 
 /// Compiled template assets for rotated or unrotated matching.
+///
+/// Use `Template::compile`/`CompiledTemplate::compile_rotated` when rotation
+/// search is required, or `CompiledTemplate::compile_unrotated` for the fast
+/// translation-only path.
 pub enum CompiledTemplate {
     /// Rotation-enabled assets.
     Rotated(CompiledTemplateRot),

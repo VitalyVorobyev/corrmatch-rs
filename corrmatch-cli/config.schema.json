@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CorrMatch CLI Config",
+  "type": "object",
+  "required": ["image_path", "template_path"],
+  "properties": {
+    "image_path": {
+      "type": "string",
+      "description": "Path to the input image (grayscale or RGB)."
+    },
+    "template_path": {
+      "type": "string",
+      "description": "Path to the template image (grayscale or RGB)."
+    },
+    "output_path": {
+      "type": "string",
+      "description": "Optional output path for the JSON results."
+    },
+    "topk": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Number of matches to return."
+    },
+    "compile": {
+      "type": "object",
+      "description": "Compile-time settings for the template.",
+      "properties": {
+        "max_levels": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 6
+        },
+        "coarse_step_deg": {
+          "type": "number",
+          "default": 10.0,
+          "description": "Rotation step at the coarsest level (ignored when rotation is disabled)."
+        },
+        "min_step_deg": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Minimum rotation step across levels (ignored when rotation is disabled)."
+        },
+        "fill_value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 0,
+          "description": "Fill value used for out-of-bounds rotations."
+        },
+        "precompute_coarsest": {
+          "type": "boolean",
+          "default": true,
+          "description": "Precompute all rotations for the coarsest level."
+        }
+      },
+      "additionalProperties": false
+    },
+    "match": {
+      "type": "object",
+      "description": "Runtime matching settings.",
+      "properties": {
+        "metric": {
+          "type": "string",
+          "enum": ["zncc", "ssd"],
+          "default": "zncc"
+        },
+        "rotation": {
+          "type": "string",
+          "enum": ["disabled", "enabled"],
+          "default": "disabled"
+        },
+        "parallel": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable parallel search (requires the rayon feature)."
+        },
+        "max_image_levels": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 6
+        },
+        "beam_width": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 8
+        },
+        "per_angle_topk": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        },
+        "nms_radius": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 6
+        },
+        "roi_radius": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 8
+        },
+        "angle_half_range_steps": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1
+        },
+        "min_var_i": {
+          "type": "number",
+          "default": 1e-8,
+          "description": "Minimum image variance for ZNCC (ignored for SSD)."
+        },
+        "min_score": {
+          "type": "number",
+          "default": -1.0e38
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,6 +1,5 @@
-use corrmatch::bank::{AngleGrid, CompileConfig, CompiledTemplate};
-use corrmatch::template::rotate::rotate_u8_bilinear;
-use corrmatch::{ImageView, Template};
+use corrmatch::lowlevel::{rotate_u8_bilinear, AngleGrid};
+use corrmatch::{CompileConfig, CompiledTemplate, ImageView, Template};
 
 #[test]
 fn angle_grid_full_range_and_nearest_index() {

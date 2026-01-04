@@ -1,5 +1,6 @@
-use corrmatch::lowlevel::{nms_2d, scan_masked_zncc_scalar, MaskedTemplatePlan, Peak};
-use corrmatch::template::rotate::rotate_u8_bilinear_masked;
+use corrmatch::lowlevel::{
+    nms_2d, rotate_u8_bilinear_masked, scan_masked_zncc_scalar, MaskedTemplatePlan, Peak,
+};
 use corrmatch::ImageView;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};

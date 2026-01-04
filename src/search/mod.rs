@@ -23,9 +23,9 @@ use crate::ImageView;
 /// Matching metric selector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
-    /// Zero-mean normalized cross-correlation.
+    /// Zero-mean normalized cross-correlation (higher is better, roughly [-1, 1]).
     Zncc,
-    /// Sum of squared differences.
+    /// Sum of squared differences (reported as negative SSE, higher is better).
     Ssd,
 }
 
@@ -54,6 +54,8 @@ pub struct MatchConfig {
     /// Beam width kept per level after merge and NMS.
     pub beam_width: usize,
     /// Top-M peaks per angle at the coarsest level.
+    ///
+    /// Ignored when rotation is disabled.
     pub per_angle_topk: usize,
     /// Spatial NMS radius in pixels for the current level.
     pub nms_radius: usize,

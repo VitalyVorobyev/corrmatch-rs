@@ -1,6 +1,7 @@
-use corrmatch::bank::{CompileConfig, CompileConfigNoRot, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, RotationMode};
-use corrmatch::{ImageView, Template};
+use corrmatch::{
+    CompileConfig, CompileConfigNoRot, CompiledTemplate, ImageView, MatchConfig, Matcher,
+    RotationMode, Template,
+};
 
 fn make_template(width: usize, height: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(width * height);

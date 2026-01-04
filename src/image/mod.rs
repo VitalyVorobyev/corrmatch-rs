@@ -6,7 +6,8 @@
 //! views into the same backing slice and retain the original stride.
 //!
 //! `OwnedImage` stores a contiguous grayscale image and can provide an
-//! `ImageView` into its buffer.
+//! `ImageView` into its buffer. When the `image-io` feature is enabled, the
+//! `io` module provides convenience loaders.
 
 use crate::util::{CorrMatchError, CorrMatchResult};
 

@@ -1,7 +1,8 @@
-use corrmatch::bank::{CompileConfig, CompileConfigNoRot, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, Metric, RotationMode};
-use corrmatch::template::rotate::rotate_u8_bilinear_masked;
-use corrmatch::{ImageView, Template};
+use corrmatch::lowlevel::rotate_u8_bilinear_masked;
+use corrmatch::{
+    CompileConfig, CompileConfigNoRot, CompiledTemplate, ImageView, MatchConfig, Matcher, Metric,
+    RotationMode, Template,
+};
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::hint::black_box;
 

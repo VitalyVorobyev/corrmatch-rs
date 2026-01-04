@@ -22,3 +22,6 @@ default = []
 rayon = ["dep:rayon"]
 simd = ["dep:wide"]
 image-io = ["dep:image"]
+
+[workspace]
+members = ["corrmatch-cli"]
