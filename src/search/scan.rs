@@ -5,6 +5,68 @@ use crate::template::MaskedTemplatePlan;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
+/// Computes the masked ZNCC score for a single placement.
+///
+/// The placement coordinates are top-left offsets into the image. If the
+/// placement is invalid or the local variance is too small, returns
+/// `f32::NEG_INFINITY`.
+pub fn score_masked_zncc_at(
+    image: ImageView<'_, u8>,
+    tpl: &MaskedTemplatePlan,
+    x: usize,
+    y: usize,
+    min_var_i: f32,
+) -> f32 {
+    let img_width = image.width();
+    let img_height = image.height();
+    let tpl_width = tpl.width();
+    let tpl_height = tpl.height();
+
+    if img_width < tpl_width || img_height < tpl_height {
+        return f32::NEG_INFINITY;
+    }
+    if x > img_width - tpl_width || y > img_height - tpl_height {
+        return f32::NEG_INFINITY;
+    }
+
+    let sum_w = tpl.sum_w();
+    let var_t = tpl.var_t();
+    let t_prime = tpl.t_prime();
+    let mask = tpl.mask();
+
+    let mut dot = 0.0f32;
+    let mut sum_i = 0.0f32;
+    let mut sum_i2 = 0.0f32;
+
+    for ty in 0..tpl_height {
+        let img_row = image.row(y + ty).expect("row within bounds for score");
+        let base = ty * tpl_width;
+        for tx in 0..tpl_width {
+            let idx = base + tx;
+            if mask[idx] == 0 {
+                continue;
+            }
+            let value = img_row[x + tx] as f32;
+            dot += t_prime[idx] * value;
+            sum_i += value;
+            sum_i2 += value * value;
+        }
+    }
+
+    let var_i = sum_i2 - (sum_i * sum_i) / sum_w;
+    if var_i <= min_var_i {
+        return f32::NEG_INFINITY;
+    }
+
+    let denom = (var_t * var_i).sqrt();
+    let score = dot / denom;
+    if score.is_finite() {
+        score
+    } else {
+        f32::NEG_INFINITY
+    }
+}
+
 /// Scans an image with a masked ZNCC template and returns the top-K peaks.
 ///
 /// The score is expected to lie in approximately `[-1, 1]` for normalized data.

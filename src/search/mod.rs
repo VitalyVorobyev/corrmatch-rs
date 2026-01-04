@@ -9,7 +9,7 @@ pub(crate) mod scan;
 use crate::bank::CompiledTemplate;
 use crate::image::pyramid::ImagePyramid;
 use crate::search::coarse::coarse_search_level;
-use crate::search::refine::refine_to_finer_level;
+use crate::search::refine::{refine_final_match, refine_to_finer_level};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
@@ -52,10 +52,10 @@ impl Default for MatchConfig {
 /// Match result for the finest pyramid level.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Match {
-    /// Top-left x coordinate of the template placement (level 0).
-    pub x: usize,
-    /// Top-left y coordinate of the template placement (level 0).
-    pub y: usize,
+    /// Refined top-left x coordinate of the template placement (level 0).
+    pub x: f32,
+    /// Refined top-left y coordinate of the template placement (level 0).
+    pub y: f32,
     /// Estimated rotation angle in degrees.
     pub angle_deg: f32,
     /// Masked ZNCC score for the best match.
@@ -126,11 +126,12 @@ impl Matcher {
         }
 
         let best = seeds[0];
-        Ok(Match {
-            x: best.x,
-            y: best.y,
+        let refined = refine_final_match(image, &self.compiled, 0, best, &self.cfg);
+        Ok(refined.unwrap_or(Match {
+            x: best.x as f32,
+            y: best.y as f32,
             angle_deg: best.angle_deg,
             score: best.score,
-        })
+        }))
     }
 }
