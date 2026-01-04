@@ -1,5 +1,5 @@
 use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher};
+use corrmatch::search::{MatchConfig, Matcher, RotationMode};
 use corrmatch::{ImageView, Template};
 
 fn make_template(width: usize, height: usize) -> Vec<u8> {
@@ -71,6 +71,7 @@ fn refinement_handles_border_candidates() {
         roi_radius: 4,
         nms_radius: 3,
         angle_half_range_steps: 1,
+        rotation: RotationMode::Disabled,
         ..MatchConfig::default()
     };
     let matcher = Matcher::new(compiled).with_config(cfg);
@@ -120,6 +121,7 @@ fn refinement_keeps_center_angle_on_symmetric_template() {
         roi_radius: 4,
         nms_radius: 3,
         angle_half_range_steps: 1,
+        rotation: RotationMode::Enabled,
         ..MatchConfig::default()
     };
     let matcher = Matcher::new(compiled).with_config(cfg);

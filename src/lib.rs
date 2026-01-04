@@ -1,6 +1,7 @@
 //! CorrMatch is a CPU-first template matching library focused on ZNCC.
 //!
-//! This crate currently provides scaffolding only; algorithms are not implemented yet.
+//! This crate provides baseline scalar kernels and a coarse-to-fine matcher;
+//! SIMD and parallel acceleration are planned.
 
 pub mod bank;
 mod candidate;
@@ -21,4 +22,4 @@ pub use candidate::topk::{Peak, TopK};
 pub use search::scan::{
     scan_masked_zncc_scalar, scan_masked_zncc_scalar_full, scan_masked_zncc_scalar_roi,
 };
-pub use search::{Match, MatchConfig, Matcher};
+pub use search::{Match, MatchConfig, Matcher, Metric, RotationMode};

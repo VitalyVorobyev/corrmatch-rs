@@ -8,14 +8,39 @@ pub(crate) mod scan;
 
 use crate::bank::CompiledTemplate;
 use crate::image::pyramid::ImagePyramid;
-use crate::search::coarse::coarse_search_level;
-use crate::search::refine::{refine_final_match, refine_to_finer_level};
+use crate::search::coarse::{coarse_search_level, coarse_search_level_unmasked};
+use crate::search::refine::{
+    refine_final_match, refine_final_match_unmasked, refine_to_finer_level,
+    refine_to_finer_level_unmasked,
+};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
+
+/// Matching metric selector (SSD is planned but not implemented).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Metric {
+    /// Zero-mean normalized cross-correlation.
+    Zncc,
+    /// Sum of squared differences (placeholder).
+    Ssd,
+}
+
+/// Controls whether rotation is searched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RotationMode {
+    /// Skip rotation and use the unmasked fast path.
+    Disabled,
+    /// Enable rotation search using masked kernels.
+    Enabled,
+}
 
 /// Configuration for the coarse-to-fine matcher pipeline.
 #[derive(Clone, Debug)]
 pub struct MatchConfig {
+    /// Matching metric to use.
+    pub metric: Metric,
+    /// Whether rotation search is enabled.
+    pub rotation: RotationMode,
     /// Maximum pyramid levels to build for the image.
     pub max_image_levels: usize,
     /// Beam width kept per level after merge and NMS.
@@ -27,6 +52,8 @@ pub struct MatchConfig {
     /// Refinement ROI radius in pixels for the current level.
     pub roi_radius: usize,
     /// Angle neighborhood half-range in multiples of the grid step.
+    ///
+    /// Ignored when rotation is disabled.
     pub angle_half_range_steps: usize,
     /// Minimum variance for image patches.
     pub min_var_i: f32,
@@ -37,6 +64,8 @@ pub struct MatchConfig {
 impl Default for MatchConfig {
     fn default() -> Self {
         Self {
+            metric: Metric::Zncc,
+            rotation: RotationMode::Disabled,
             max_image_levels: 6,
             beam_width: 8,
             per_angle_topk: 3,
@@ -84,7 +113,13 @@ impl Matcher {
     }
 
     /// Matches a template against an image and returns the best candidate.
+    ///
+    /// When rotation is disabled, angle-related settings are ignored.
     pub fn match_image(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Match> {
+        if self.cfg.metric != Metric::Zncc {
+            return Err(CorrMatchError::UnsupportedMetric { metric: "ssd" });
+        }
+
         let pyramid = ImagePyramid::build_u8(image, self.cfg.max_image_levels)?;
         let num_levels = pyramid.levels().len().min(self.compiled.num_levels());
         if num_levels == 0 {
@@ -102,7 +137,14 @@ impl Matcher {
                 len: pyramid.levels().len(),
                 context: "image level",
             })?;
-        let mut seeds = coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?;
+        let mut seeds = match self.cfg.rotation {
+            RotationMode::Enabled => {
+                coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+            }
+            RotationMode::Disabled => {
+                coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, &self.cfg)?
+            }
+        };
         if seeds.is_empty() {
             return Err(CorrMatchError::NoCandidates {
                 reason: "no coarse candidates",
@@ -117,7 +159,18 @@ impl Matcher {
                     len: pyramid.levels().len(),
                     context: "image level",
                 })?;
-            seeds = refine_to_finer_level(level_view, &self.compiled, level, &seeds, &self.cfg)?;
+            seeds = match self.cfg.rotation {
+                RotationMode::Enabled => {
+                    refine_to_finer_level(level_view, &self.compiled, level, &seeds, &self.cfg)?
+                }
+                RotationMode::Disabled => refine_to_finer_level_unmasked(
+                    level_view,
+                    &self.compiled,
+                    level,
+                    &seeds,
+                    &self.cfg,
+                )?,
+            };
             if seeds.is_empty() {
                 return Err(CorrMatchError::NoCandidates {
                     reason: "no candidates after refinement",
@@ -126,7 +179,12 @@ impl Matcher {
         }
 
         let best = seeds[0];
-        let refined = refine_final_match(image, &self.compiled, 0, best, &self.cfg);
+        let refined = match self.cfg.rotation {
+            RotationMode::Enabled => refine_final_match(image, &self.compiled, 0, best, &self.cfg),
+            RotationMode::Disabled => {
+                refine_final_match_unmasked(image, &self.compiled, 0, best, &self.cfg)
+            }
+        };
         Ok(refined.unwrap_or(Match {
             x: best.x as f32,
             y: best.y as f32,

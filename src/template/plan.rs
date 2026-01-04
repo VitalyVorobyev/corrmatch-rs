@@ -3,12 +3,13 @@
 use crate::image::ImageView;
 use crate::util::{CorrMatchError, CorrMatchResult};
 
-/// Precomputed statistics and zero-mean buffer for template matching.
+/// Precomputed statistics and zero-mean buffer for unmasked ZNCC matching.
 pub struct TemplatePlan {
     width: usize,
     height: usize,
     mean: f32,
     inv_std: f32,
+    var_t: f32,
     zero_mean: Vec<f32>,
 }
 
@@ -52,6 +53,7 @@ impl TemplatePlan {
 
         let mean = mean_f64 as f32;
         let inv_std = (1.0 / variance.sqrt()) as f32;
+        let var_t = (variance * count_f) as f32;
         let mut zero_mean = Vec::with_capacity(count);
         for y in 0..height {
             let row = tpl.row(y).ok_or_else(|| {
@@ -74,6 +76,7 @@ impl TemplatePlan {
             height,
             mean,
             inv_std,
+            var_t,
             zero_mean,
         })
     }
@@ -96,6 +99,16 @@ impl TemplatePlan {
     /// Returns the inverse standard deviation of the template.
     pub fn inv_std(&self) -> f32 {
         self.inv_std
+    }
+
+    /// Returns the template variance term used by ZNCC.
+    pub fn var_t(&self) -> f32 {
+        self.var_t
+    }
+
+    /// Returns the zero-mean template buffer in row-major order.
+    pub fn t_prime(&self) -> &[f32] {
+        &self.zero_mean
     }
 
     /// Returns the zero-mean template buffer in row-major order.

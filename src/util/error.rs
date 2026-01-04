@@ -45,4 +45,7 @@ pub enum CorrMatchError {
     /// The search did not produce any valid candidates.
     #[error("no candidates: {reason}")]
     NoCandidates { reason: &'static str },
+    /// The requested metric is not supported yet.
+    #[error("unsupported metric: {metric}")]
+    UnsupportedMetric { metric: &'static str },
 }
