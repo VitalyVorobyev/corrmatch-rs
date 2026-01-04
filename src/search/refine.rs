@@ -15,6 +15,8 @@ use crate::util::math::wrap_deg;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Candidate {
     pub(crate) level: usize,
@@ -220,6 +222,183 @@ pub(crate) fn refine_to_finer_level_unmasked(
         all_peaks.extend(peaks);
     }
 
+    if all_peaks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    if kept.len() > cfg.beam_width {
+        kept.truncate(cfg.beam_width);
+    }
+
+    let mut out = Vec::with_capacity(kept.len());
+    for peak in kept.drain(..) {
+        out.push(Candidate::from_peak(finer_level, 0.0, peak));
+    }
+
+    Ok(out)
+}
+
+/// Refinement search around coarse candidates (parallel).
+#[cfg(feature = "rayon")]
+pub(crate) fn refine_to_finer_level_par(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    finer_level: usize,
+    prev: &[Candidate],
+    cfg: &MatchConfig,
+) -> CorrMatchResult<Vec<Candidate>> {
+    if prev.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let grid = compiled
+        .angle_grid(finer_level)
+        .ok_or(CorrMatchError::IndexOutOfBounds {
+            index: finer_level,
+            len: compiled.num_levels(),
+            context: "level",
+        })?;
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(finer_level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: finer_level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
+
+    let img_width = image.width();
+    let img_height = image.height();
+    if img_width < tpl_width || img_height < tpl_height {
+        return Err(CorrMatchError::RoiOutOfBounds {
+            x: 0,
+            y: 0,
+            width: tpl_width,
+            height: tpl_height,
+            img_width,
+            img_height,
+        });
+    }
+
+    let max_x = img_width - tpl_width;
+    let max_y = img_height - tpl_height;
+
+    let results: Vec<_> = prev
+        .par_iter()
+        .copied()
+        .map(|cand| {
+            debug_assert!(cand.level > finer_level);
+            let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+            let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                Some(bounds) => bounds,
+                None => return Ok(Vec::new()),
+            };
+
+            let half_range = cfg.angle_half_range_steps as f32 * grid.step_deg();
+            let angle_indices = grid.indices_within(cand.angle_deg, half_range);
+            let mut local_peaks = Vec::new();
+            for angle_idx in angle_indices {
+                let rotated = compiled.rotated(finer_level, angle_idx)?;
+                let plan = rotated.plan();
+                let peaks = scan_masked_zncc_scalar_roi(
+                    image,
+                    plan,
+                    angle_idx,
+                    roi.0,
+                    roi.1,
+                    roi.2,
+                    roi.3,
+                    cfg.per_angle_topk,
+                    cfg.min_var_i,
+                    cfg.min_score,
+                )?;
+                local_peaks.extend(peaks);
+            }
+
+            Ok(local_peaks)
+        })
+        .collect();
+
+    let mut all_peaks = Vec::new();
+    for result in results {
+        all_peaks.extend(result?);
+    }
+    if all_peaks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    if kept.len() > cfg.beam_width {
+        kept.truncate(cfg.beam_width);
+    }
+
+    let mut out = Vec::with_capacity(kept.len());
+    for peak in kept.drain(..) {
+        let angle_deg = grid.angle_at(peak.angle_idx);
+        out.push(Candidate::from_peak(finer_level, angle_deg, peak));
+    }
+
+    Ok(out)
+}
+
+/// Refines candidates without rotation by scanning only translation ROIs (parallel).
+#[cfg(feature = "rayon")]
+pub(crate) fn refine_to_finer_level_unmasked_par(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    finer_level: usize,
+    prev: &[Candidate],
+    cfg: &MatchConfig,
+) -> CorrMatchResult<Vec<Candidate>> {
+    if prev.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let plan = compiled.unmasked_plan(finer_level)?;
+    let (tpl_width, tpl_height) = (plan.width(), plan.height());
+
+    let img_width = image.width();
+    let img_height = image.height();
+    if img_width < tpl_width || img_height < tpl_height {
+        return Err(CorrMatchError::RoiOutOfBounds {
+            x: 0,
+            y: 0,
+            width: tpl_width,
+            height: tpl_height,
+            img_width,
+            img_height,
+        });
+    }
+
+    let max_x = img_width - tpl_width;
+    let max_y = img_height - tpl_height;
+    let params = ScanParams {
+        topk: cfg.per_angle_topk,
+        min_var_i: cfg.min_var_i,
+        min_score: cfg.min_score,
+    };
+
+    let results: Vec<_> = prev
+        .par_iter()
+        .copied()
+        .map(|cand| {
+            debug_assert!(cand.level > finer_level);
+            let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+            let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                Some(bounds) => bounds,
+                None => return Ok(Vec::new()),
+            };
+            <ZnccUnmaskedScalar as Kernel>::scan_roi(
+                image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
+            )
+        })
+        .collect();
+
+    let mut all_peaks = Vec::new();
+    for result in results {
+        all_peaks.extend(result?);
+    }
     if all_peaks.is_empty() {
         return Ok(Vec::new());
     }

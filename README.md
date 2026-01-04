@@ -13,6 +13,8 @@ reproducible matching with a minimal dependency footprint.
 - `Metric::Zncc` is supported today; `Metric::Ssd` is scaffolded but not implemented.
 - `RotationMode::Disabled` (default) uses the unmasked fast path; enable rotation
   when you need angle search.
+- `MatchConfig.parallel` enables rayon-backed parallel search when the feature
+  is enabled; otherwise it falls back to sequential execution.
 
 ## Current building blocks
 ```rust
@@ -96,3 +98,17 @@ use corrmatch::CorrMatchResult;
 Core data types, compiled template assets, a coarse-to-fine matcher, and
 subpixel/subangle refinement are implemented; higher-level APIs and
 SIMD/parallel acceleration are pending.
+
+## Benchmarks
+Run the benchmark suite with:
+```
+cargo bench
+```
+To enable the parallel path:
+```
+cargo bench --features rayon
+```
+You can also run the test suite with rayon enabled:
+```
+cargo test --features rayon
+```
