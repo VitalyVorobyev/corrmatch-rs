@@ -1,114 +1,108 @@
 # corrmatch
+[![CI](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/corrmatch.svg)](https://crates.io/crates/corrmatch)
+[![docs.rs](https://img.shields.io/docsrs/corrmatch)](https://docs.rs/corrmatch)
+[![license](https://img.shields.io/crates/l/corrmatch.svg)](LICENSE)
 
-CorrMatch is a CPU-first template matching crate focused on ZNCC scoring across
-image pyramids with hierarchical rotation search. The goal is deterministic,
-reproducible matching with a minimal dependency footprint.
+CorrMatch is a CPU-first template matching library for grayscale images. It
+implements a coarse-to-fine pyramid search with optional rotation and two
+metrics: ZNCC and SSD. The focus is deterministic, reproducible matching with
+minimal dependencies.
 
-## Feature flags
-- `rayon`: parallel search execution (off by default).
-- `simd`: SIMD-accelerated kernels via `wide` (off by default).
-- `image-io`: enable `image` crate helpers for examples (off by default).
-
-## Search options
-- `Metric::Zncc` is supported today; `Metric::Ssd` is scaffolded but not implemented.
-- `RotationMode::Disabled` (default) uses the unmasked fast path; enable rotation
-  when you need angle search.
-- `MatchConfig.parallel` enables rayon-backed parallel search when the feature
-  is enabled; otherwise it falls back to sequential execution.
-
-## Current building blocks
+## Quickstart (library)
 ```rust
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, RotationMode};
-use corrmatch::template::rotate::rotate_u8_bilinear_masked;
 use corrmatch::{
-    scan_masked_zncc_scalar, CorrMatchResult, ImagePyramid, ImageView,
-    MaskedTemplatePlan, Peak, Template, TemplatePlan,
+    CompileConfig, MatchConfig, Matcher, RotationMode, Template, ImageView,
 };
 
-fn prepare_plan(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    tpl: Vec<u8>,
-    tpl_width: usize,
-    tpl_height: usize,
-) -> CorrMatchResult<TemplatePlan> {
-    let view = ImageView::from_slice(image, width, height)?;
-    let _pyramid = ImagePyramid::build_u8(view, 4)?;
-    let template = Template::new(tpl, tpl_width, tpl_height)?;
-    TemplatePlan::from_view(template.view())
-}
-
-fn compile_template(
-    tpl: Vec<u8>,
-    tpl_width: usize,
-    tpl_height: usize,
-) -> CorrMatchResult<CompiledTemplate> {
-    let template = Template::new(tpl, tpl_width, tpl_height)?;
-    CompiledTemplate::compile(&template, CompileConfig::default())
-}
-
-fn match_template(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    tpl: Vec<u8>,
-    tpl_width: usize,
-    tpl_height: usize,
-) -> CorrMatchResult<corrmatch::Match> {
-    let template = Template::new(tpl, tpl_width, tpl_height)?;
-    let compiled = CompiledTemplate::compile(&template, CompileConfig::default())?;
-    let matcher = Matcher::new(compiled).with_config(MatchConfig {
-        rotation: RotationMode::Enabled,
-        ..MatchConfig::default()
-    });
-    let image_view = ImageView::from_slice(image, width, height)?;
-    matcher.match_image(image_view)
-}
-
-fn scan_one_angle(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    tpl: Vec<u8>,
-    tpl_width: usize,
-    tpl_height: usize,
-    angle_deg: f32,
-) -> CorrMatchResult<Vec<Peak>> {
-    let image_view = ImageView::from_slice(image, width, height)?;
-    let tpl_view = ImageView::from_slice(&tpl, tpl_width, tpl_height)?;
-    let (rotated, mask) = rotate_u8_bilinear_masked(tpl_view, angle_deg, 0);
-    let plan = MaskedTemplatePlan::from_rotated_u8(rotated.view(), mask, angle_deg)?;
-    scan_masked_zncc_scalar(image_view, &plan, 0, 5)
-}
+# fn run(image: &[u8], width: usize, height: usize, tpl: Vec<u8>, tw: usize, th: usize)
+#     -> corrmatch::CorrMatchResult<corrmatch::Match> {
+let template = Template::new(tpl, tw, th)?;
+let compiled = template.compile(CompileConfig::default())?;
+let matcher = Matcher::new(compiled).with_config(MatchConfig {
+    rotation: RotationMode::Enabled,
+    ..MatchConfig::default()
+});
+let image_view = ImageView::from_slice(image, width, height)?;
+matcher.match_image(image_view)
+# }
 ```
 
-## Planned API sketch
+To retrieve multiple results:
 ```rust
-use corrmatch::CorrMatchResult;
-
-// Pseudo-code for the planned API shape.
-// let plan = corrmatch::TemplatePlan::new(template, config);
-// let matcher = corrmatch::Matcher::new(plan);
-// let matches = matcher.search(&image)?;
+# use corrmatch::{CompileConfig, MatchConfig, Matcher, RotationMode, Template, ImageView};
+# fn run(image: &[u8], width: usize, height: usize, tpl: Vec<u8>, tw: usize, th: usize)
+#     -> corrmatch::CorrMatchResult<Vec<corrmatch::Match>> {
+let template = Template::new(tpl, tw, th)?;
+let compiled = template.compile(CompileConfig::default())?;
+let matcher = Matcher::new(compiled).with_config(MatchConfig {
+    rotation: RotationMode::Enabled,
+    ..MatchConfig::default()
+});
+let image_view = ImageView::from_slice(image, width, height)?;
+matcher.match_image_topk(image_view, 5)
+# }
 ```
+
+If you do not need rotation support, compile a lighter template:
+```rust
+# use corrmatch::{CompileConfigNoRot, CompiledTemplate, CorrMatchResult, Template};
+# fn compile_no_rot(tpl: Vec<u8>, w: usize, h: usize) -> CorrMatchResult<CompiledTemplate> {
+let template = Template::new(tpl, w, h)?;
+CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot::default())
+# }
+```
+
+## CLI (corrmatch-cli)
+The workspace includes a JSON-driven CLI.
+
+- Build: `cargo build -p corrmatch-cli`
+- Run: `cargo run -p corrmatch-cli -- --config config.json`
+- Print schema: `cargo run -p corrmatch-cli -- --print-schema`
+- Print example: `cargo run -p corrmatch-cli -- --print-example`
+
+The schema lives at `corrmatch-cli/config.schema.json`, and an example config is
+at `corrmatch-cli/config.example.json`.
+
+## Concepts
+- `Template`: owned template pixels (contiguous grayscale).
+- `CompiledTemplate`: precomputed template pyramid plus optional angle banks.
+- `Matcher`: runs coarse-to-fine search using `MatchConfig`.
+- `Metric`: `Zncc` or `Ssd`.
+- `RotationMode`: `Disabled` (fast path) or `Enabled` (masked rotation search).
+- Coordinates: results are top-left placement coordinates at level 0.
+
+## Configuration
+- `CompileConfig` controls template pyramid depth and rotation grid. When
+  rotation is disabled, only `max_levels` is used.
+- `MatchConfig` controls the search strategy (beam width, ROI size, NMS radius,
+  and angle neighborhood). For SSD, `min_var_i` is ignored.
+
+## Feature flags
+- `rayon`: parallel search execution.
+- `simd`: SIMD-accelerated kernels (planned).
+- `image-io`: file I/O helpers via the `image` crate.
+
+## Low-level API
+Advanced hooks live in `corrmatch::lowlevel`, including template plans, kernel
+traits, scan helpers, and rotation utilities. These are intended for custom
+pipelines and experimentation.
+
+## Image I/O (feature `image-io`)
+```rust
+# #[cfg(feature = "image-io")]
+# {
+use corrmatch::io::load_gray_image;
+let template = load_gray_image("template.png")?;
+# }
+```
+
+## Benchmarks and tests
+- `cargo test`
+- `cargo test --features rayon`
+- `cargo bench`
 
 ## Status
 Core data types, compiled template assets, a coarse-to-fine matcher, and
-subpixel/subangle refinement are implemented; higher-level APIs and
-SIMD/parallel acceleration are pending.
-
-## Benchmarks
-Run the benchmark suite with:
-```
-cargo bench
-```
-To enable the parallel path:
-```
-cargo bench --features rayon
-```
-You can also run the test suite with rayon enabled:
-```
-cargo test --features rayon
-```
+subpixel/subangle refinement are implemented. Next up: reference test cases,
+performance baselines, and Python bindings via PyO3.

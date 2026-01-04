@@ -4,13 +4,15 @@
 //! ROI and angle neighborhood to improve position and angle estimates.
 
 use crate::bank::CompiledTemplate;
+use crate::candidate::nms::nms_2d;
 use crate::candidate::topk::Peak;
-use crate::kernel::scalar::ZnccUnmaskedScalar;
+use crate::kernel::scalar::{
+    SsdMaskedScalar, SsdUnmaskedScalar, ZnccMaskedScalar, ZnccUnmaskedScalar,
+};
 use crate::kernel::{Kernel, ScanParams};
 use crate::refine::quad1d::quad_peak_offset_1d;
 use crate::refine::quad2d::refine_subpixel_2d;
-use crate::search::scan::{scan_masked_zncc_scalar_roi, score_masked_zncc_at};
-use crate::search::{Match, MatchConfig};
+use crate::search::{Match, MatchConfig, Metric};
 use crate::util::math::wrap_deg;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
@@ -123,6 +125,11 @@ pub(crate) fn refine_to_finer_level(
 
     let max_x = img_width - tpl_width;
     let max_y = img_height - tpl_height;
+    let params = ScanParams {
+        topk: cfg.per_angle_topk,
+        min_var_i: cfg.min_var_i,
+        min_score: cfg.min_score,
+    };
     let mut all_peaks = Vec::new();
 
     for cand in prev.iter().copied() {
@@ -136,20 +143,20 @@ pub(crate) fn refine_to_finer_level(
         let half_range = cfg.angle_half_range_steps as f32 * grid.step_deg();
         let angle_indices = grid.indices_within(cand.angle_deg, half_range);
         for angle_idx in angle_indices {
-            let rotated = compiled.rotated(finer_level, angle_idx)?;
-            let plan = rotated.plan();
-            let peaks = scan_masked_zncc_scalar_roi(
-                image,
-                plan,
-                angle_idx,
-                roi.0,
-                roi.1,
-                roi.2,
-                roi.3,
-                cfg.per_angle_topk,
-                cfg.min_var_i,
-                cfg.min_score,
-            )?;
+            let peaks = match cfg.metric {
+                Metric::Zncc => {
+                    let plan = compiled.rotated_zncc_plan(finer_level, angle_idx)?;
+                    <ZnccMaskedScalar as Kernel>::scan_roi(
+                        image, plan, angle_idx, roi.0, roi.1, roi.2, roi.3, params,
+                    )?
+                }
+                Metric::Ssd => {
+                    let plan = compiled.rotated_ssd_plan(finer_level, angle_idx)?;
+                    <SsdMaskedScalar as Kernel>::scan_roi(
+                        image, plan, angle_idx, roi.0, roi.1, roi.2, roi.3, params,
+                    )?
+                }
+            };
             all_peaks.extend(peaks);
         }
     }
@@ -158,7 +165,7 @@ pub(crate) fn refine_to_finer_level(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -184,8 +191,14 @@ pub(crate) fn refine_to_finer_level_unmasked(
         return Ok(Vec::new());
     }
 
-    let plan = compiled.unmasked_plan(finer_level)?;
-    let (tpl_width, tpl_height) = (plan.width(), plan.height());
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(finer_level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: finer_level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
 
     let img_width = image.width();
     let img_height = image.height();
@@ -209,24 +222,44 @@ pub(crate) fn refine_to_finer_level_unmasked(
     };
     let mut all_peaks = Vec::new();
 
-    for cand in prev.iter().copied() {
-        debug_assert!(cand.level > finer_level);
-        let (x_up, y_up) = upscale_pos(cand.x, cand.y);
-        let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
-            Some(bounds) => bounds,
-            None => continue,
-        };
-        let peaks = <ZnccUnmaskedScalar as Kernel>::scan_roi(
-            image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
-        )?;
-        all_peaks.extend(peaks);
+    match cfg.metric {
+        Metric::Zncc => {
+            let plan = compiled.unmasked_zncc_plan(finer_level)?;
+            for cand in prev.iter().copied() {
+                debug_assert!(cand.level > finer_level);
+                let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+                let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                    Some(bounds) => bounds,
+                    None => continue,
+                };
+                let peaks = <ZnccUnmaskedScalar as Kernel>::scan_roi(
+                    image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
+                )?;
+                all_peaks.extend(peaks);
+            }
+        }
+        Metric::Ssd => {
+            let plan = compiled.unmasked_ssd_plan(finer_level)?;
+            for cand in prev.iter().copied() {
+                debug_assert!(cand.level > finer_level);
+                let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+                let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                    Some(bounds) => bounds,
+                    None => continue,
+                };
+                let peaks = <SsdUnmaskedScalar as Kernel>::scan_roi(
+                    image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
+                )?;
+                all_peaks.extend(peaks);
+            }
+        }
     }
 
     if all_peaks.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -298,21 +331,26 @@ pub(crate) fn refine_to_finer_level_par(
             let half_range = cfg.angle_half_range_steps as f32 * grid.step_deg();
             let angle_indices = grid.indices_within(cand.angle_deg, half_range);
             let mut local_peaks = Vec::new();
+            let params = ScanParams {
+                topk: cfg.per_angle_topk,
+                min_var_i: cfg.min_var_i,
+                min_score: cfg.min_score,
+            };
             for angle_idx in angle_indices {
-                let rotated = compiled.rotated(finer_level, angle_idx)?;
-                let plan = rotated.plan();
-                let peaks = scan_masked_zncc_scalar_roi(
-                    image,
-                    plan,
-                    angle_idx,
-                    roi.0,
-                    roi.1,
-                    roi.2,
-                    roi.3,
-                    cfg.per_angle_topk,
-                    cfg.min_var_i,
-                    cfg.min_score,
-                )?;
+                let peaks = match cfg.metric {
+                    Metric::Zncc => {
+                        let plan = compiled.rotated_zncc_plan(finer_level, angle_idx)?;
+                        <ZnccMaskedScalar as Kernel>::scan_roi(
+                            image, plan, angle_idx, roi.0, roi.1, roi.2, roi.3, params,
+                        )?
+                    }
+                    Metric::Ssd => {
+                        let plan = compiled.rotated_ssd_plan(finer_level, angle_idx)?;
+                        <SsdMaskedScalar as Kernel>::scan_roi(
+                            image, plan, angle_idx, roi.0, roi.1, roi.2, roi.3, params,
+                        )?
+                    }
+                };
                 local_peaks.extend(peaks);
             }
 
@@ -328,7 +366,7 @@ pub(crate) fn refine_to_finer_level_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -355,8 +393,14 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
         return Ok(Vec::new());
     }
 
-    let plan = compiled.unmasked_plan(finer_level)?;
-    let (tpl_width, tpl_height) = (plan.width(), plan.height());
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(finer_level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: finer_level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
 
     let img_width = image.width();
     let img_height = image.height();
@@ -379,21 +423,42 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
         min_score: cfg.min_score,
     };
 
-    let results: Vec<_> = prev
-        .par_iter()
-        .copied()
-        .map(|cand| {
-            debug_assert!(cand.level > finer_level);
-            let (x_up, y_up) = upscale_pos(cand.x, cand.y);
-            let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
-                Some(bounds) => bounds,
-                None => return Ok(Vec::new()),
-            };
-            <ZnccUnmaskedScalar as Kernel>::scan_roi(
-                image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
-            )
-        })
-        .collect();
+    let results: Vec<_> = match cfg.metric {
+        Metric::Zncc => {
+            let plan = compiled.unmasked_zncc_plan(finer_level)?;
+            prev.par_iter()
+                .copied()
+                .map(|cand| {
+                    debug_assert!(cand.level > finer_level);
+                    let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+                    let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                        Some(bounds) => bounds,
+                        None => return Ok(Vec::new()),
+                    };
+                    <ZnccUnmaskedScalar as Kernel>::scan_roi(
+                        image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
+                    )
+                })
+                .collect()
+        }
+        Metric::Ssd => {
+            let plan = compiled.unmasked_ssd_plan(finer_level)?;
+            prev.par_iter()
+                .copied()
+                .map(|cand| {
+                    debug_assert!(cand.level > finer_level);
+                    let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+                    let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+                        Some(bounds) => bounds,
+                        None => return Ok(Vec::new()),
+                    };
+                    <SsdUnmaskedScalar as Kernel>::scan_roi(
+                        image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
+                    )
+                })
+                .collect()
+        }
+    };
 
     let mut all_peaks = Vec::new();
     for result in results {
@@ -403,7 +468,7 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
         return Ok(Vec::new());
     }
 
-    let mut kept = crate::nms_2d(&mut all_peaks, cfg.nms_radius);
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
     if kept.len() > cfg.beam_width {
         kept.truncate(cfg.beam_width);
     }
@@ -465,26 +530,95 @@ pub(crate) fn refine_final_match(
         });
     }
 
-    let plan = compiled.rotated(level, best.angle_idx)?.plan();
-
     let mut s = [[f32::NEG_INFINITY; 3]; 3];
     let offsets = [-1isize, 0, 1];
-    for (iy, &dy) in offsets.iter().enumerate() {
-        let y = best.y as isize + dy;
-        if y < 0 || y > max_y as isize {
-            continue;
-        }
-        for (ix, &dx) in offsets.iter().enumerate() {
-            let x = best.x as isize + dx;
-            if x < 0 || x > max_x as isize {
-                continue;
+    let (center_score, sm, sp) = match cfg.metric {
+        Metric::Zncc => {
+            let plan = compiled.rotated_zncc_plan(level, best.angle_idx)?;
+            for (iy, &dy) in offsets.iter().enumerate() {
+                let y = best.y as isize + dy;
+                if y < 0 || y > max_y as isize {
+                    continue;
+                }
+                for (ix, &dx) in offsets.iter().enumerate() {
+                    let x = best.x as isize + dx;
+                    if x < 0 || x > max_x as isize {
+                        continue;
+                    }
+                    s[iy][ix] = <ZnccMaskedScalar as Kernel>::score_at(
+                        image,
+                        plan,
+                        x as usize,
+                        y as usize,
+                        cfg.min_var_i,
+                    );
+                }
             }
-            s[iy][ix] = score_masked_zncc_at(image, plan, x as usize, y as usize, cfg.min_var_i);
-        }
-    }
 
-    let center_score = if s[1][1].is_finite() {
-        s[1][1]
+            let len = grid.len();
+            let im = (best.angle_idx + len - 1) % len;
+            let ip = (best.angle_idx + 1) % len;
+            let sm = <ZnccMaskedScalar as Kernel>::score_at(
+                image,
+                compiled.rotated_zncc_plan(level, im)?,
+                best.x,
+                best.y,
+                cfg.min_var_i,
+            );
+            let sp = <ZnccMaskedScalar as Kernel>::score_at(
+                image,
+                compiled.rotated_zncc_plan(level, ip)?,
+                best.x,
+                best.y,
+                cfg.min_var_i,
+            );
+            (s[1][1], sm, sp)
+        }
+        Metric::Ssd => {
+            let plan = compiled.rotated_ssd_plan(level, best.angle_idx)?;
+            for (iy, &dy) in offsets.iter().enumerate() {
+                let y = best.y as isize + dy;
+                if y < 0 || y > max_y as isize {
+                    continue;
+                }
+                for (ix, &dx) in offsets.iter().enumerate() {
+                    let x = best.x as isize + dx;
+                    if x < 0 || x > max_x as isize {
+                        continue;
+                    }
+                    s[iy][ix] = <SsdMaskedScalar as Kernel>::score_at(
+                        image,
+                        plan,
+                        x as usize,
+                        y as usize,
+                        cfg.min_var_i,
+                    );
+                }
+            }
+
+            let len = grid.len();
+            let im = (best.angle_idx + len - 1) % len;
+            let ip = (best.angle_idx + 1) % len;
+            let sm = <SsdMaskedScalar as Kernel>::score_at(
+                image,
+                compiled.rotated_ssd_plan(level, im)?,
+                best.x,
+                best.y,
+                cfg.min_var_i,
+            );
+            let sp = <SsdMaskedScalar as Kernel>::score_at(
+                image,
+                compiled.rotated_ssd_plan(level, ip)?,
+                best.x,
+                best.y,
+                cfg.min_var_i,
+            );
+            (s[1][1], sm, sp)
+        }
+    };
+
+    let center_score = if center_score.is_finite() {
+        center_score
     } else {
         best.score
     };
@@ -494,22 +628,6 @@ pub(crate) fn refine_final_match(
     debug_assert!(len > 0);
     let center_angle = grid.angle_at(best.angle_idx);
     let step = grid.step_deg();
-    let im = (best.angle_idx + len - 1) % len;
-    let ip = (best.angle_idx + 1) % len;
-    let sm = score_masked_zncc_at(
-        image,
-        compiled.rotated(level, im)?.plan(),
-        best.x,
-        best.y,
-        cfg.min_var_i,
-    );
-    let sp = score_masked_zncc_at(
-        image,
-        compiled.rotated(level, ip)?.plan(),
-        best.x,
-        best.y,
-        cfg.min_var_i,
-    );
     let angle_offset = quad_peak_offset_1d(sm, center_score, sp).unwrap_or(0.0);
     let angle_deg = wrap_deg(center_angle + angle_offset * step);
 
@@ -529,9 +647,14 @@ pub(crate) fn refine_final_match_unmasked(
     best: Candidate,
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Match> {
-    let plan = compiled.unmasked_plan(level)?;
-    let tpl_width = plan.width();
-    let tpl_height = plan.height();
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
 
     let img_width = image.width();
     let img_height = image.height();
@@ -560,23 +683,50 @@ pub(crate) fn refine_final_match_unmasked(
 
     let mut s = [[f32::NEG_INFINITY; 3]; 3];
     let offsets = [-1isize, 0, 1];
-    for (iy, &dy) in offsets.iter().enumerate() {
-        let y = best.y as isize + dy;
-        if y < 0 || y > max_y as isize {
-            continue;
-        }
-        for (ix, &dx) in offsets.iter().enumerate() {
-            let x = best.x as isize + dx;
-            if x < 0 || x > max_x as isize {
-                continue;
+    match cfg.metric {
+        Metric::Zncc => {
+            let plan = compiled.unmasked_zncc_plan(level)?;
+            for (iy, &dy) in offsets.iter().enumerate() {
+                let y = best.y as isize + dy;
+                if y < 0 || y > max_y as isize {
+                    continue;
+                }
+                for (ix, &dx) in offsets.iter().enumerate() {
+                    let x = best.x as isize + dx;
+                    if x < 0 || x > max_x as isize {
+                        continue;
+                    }
+                    s[iy][ix] = <ZnccUnmaskedScalar as Kernel>::score_at(
+                        image,
+                        plan,
+                        x as usize,
+                        y as usize,
+                        cfg.min_var_i,
+                    );
+                }
             }
-            s[iy][ix] = <ZnccUnmaskedScalar as Kernel>::score_at(
-                image,
-                plan,
-                x as usize,
-                y as usize,
-                cfg.min_var_i,
-            );
+        }
+        Metric::Ssd => {
+            let plan = compiled.unmasked_ssd_plan(level)?;
+            for (iy, &dy) in offsets.iter().enumerate() {
+                let y = best.y as isize + dy;
+                if y < 0 || y > max_y as isize {
+                    continue;
+                }
+                for (ix, &dx) in offsets.iter().enumerate() {
+                    let x = best.x as isize + dx;
+                    if x < 0 || x > max_x as isize {
+                        continue;
+                    }
+                    s[iy][ix] = <SsdUnmaskedScalar as Kernel>::score_at(
+                        image,
+                        plan,
+                        x as usize,
+                        y as usize,
+                        cfg.min_var_i,
+                    );
+                }
+            }
         }
     }
 

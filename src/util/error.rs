@@ -48,4 +48,10 @@ pub enum CorrMatchError {
     /// The requested metric is not supported yet.
     #[error("unsupported metric: {metric}")]
     UnsupportedMetric { metric: &'static str },
+    /// Rotation assets are unavailable for the requested operation.
+    #[error("rotation unavailable: {reason}")]
+    RotationUnavailable { reason: &'static str },
+    /// Image I/O failed.
+    #[error("image io error: {reason}")]
+    ImageIo { reason: String },
 }

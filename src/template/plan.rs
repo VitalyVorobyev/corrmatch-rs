@@ -1,7 +1,8 @@
-//! Template plan precomputation for ZNCC-like metrics.
+//! Template plan precomputation for ZNCC and SSD metrics.
 
 use crate::image::ImageView;
 use crate::util::{CorrMatchError, CorrMatchResult};
+use std::sync::Arc;
 
 /// Precomputed statistics and zero-mean buffer for unmasked ZNCC matching.
 pub struct TemplatePlan {
@@ -117,6 +118,62 @@ impl TemplatePlan {
     }
 }
 
+/// Precomputed template buffer for SSD matching.
+pub struct SsdTemplatePlan {
+    width: usize,
+    height: usize,
+    data: Vec<f32>,
+}
+
+impl SsdTemplatePlan {
+    /// Builds an SSD plan from a template view.
+    pub fn from_view(tpl: ImageView<'_, u8>) -> CorrMatchResult<Self> {
+        let width = tpl.width();
+        let height = tpl.height();
+        let count = width
+            .checked_mul(height)
+            .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
+
+        let mut data = Vec::with_capacity(count);
+        for y in 0..height {
+            let row = tpl.row(y).ok_or_else(|| {
+                let needed = (y + 1)
+                    .checked_mul(tpl.stride())
+                    .and_then(|v| v.checked_add(tpl.width()))
+                    .unwrap_or(usize::MAX);
+                CorrMatchError::BufferTooSmall {
+                    needed,
+                    got: tpl.as_slice().len(),
+                }
+            })?;
+            for &value in row {
+                data.push(value as f32);
+            }
+        }
+
+        Ok(Self {
+            width,
+            height,
+            data,
+        })
+    }
+
+    /// Returns the template width in pixels.
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Returns the template height in pixels.
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Returns the template buffer in row-major order.
+    pub fn data(&self) -> &[f32] {
+        &self.data
+    }
+}
+
 /// Precomputed masked statistics for ZNCC-style matching on rotated templates.
 pub struct MaskedTemplatePlan {
     width: usize,
@@ -124,7 +181,7 @@ pub struct MaskedTemplatePlan {
     sum_w: f32,
     var_t: f32,
     t_prime: Vec<f32>,
-    mask: Vec<u8>,
+    mask: Arc<[u8]>,
     angle_deg: f32,
 }
 
@@ -133,6 +190,14 @@ impl MaskedTemplatePlan {
     pub fn from_rotated_u8(
         rot: ImageView<'_, u8>,
         mask: Vec<u8>,
+        angle_deg: f32,
+    ) -> CorrMatchResult<Self> {
+        Self::from_rotated_parts(rot, Arc::from(mask), angle_deg)
+    }
+
+    pub(crate) fn from_rotated_parts(
+        rot: ImageView<'_, u8>,
+        mask: Arc<[u8]>,
         angle_deg: f32,
     ) -> CorrMatchResult<Self> {
         let width = rot.width();
@@ -245,7 +310,109 @@ impl MaskedTemplatePlan {
 
     /// Returns the binary mask buffer (0 or 1 per pixel).
     pub fn mask(&self) -> &[u8] {
-        &self.mask
+        self.mask.as_ref()
+    }
+
+    /// Returns the rotation angle in degrees.
+    pub fn angle_deg(&self) -> f32 {
+        self.angle_deg
+    }
+}
+
+/// Precomputed masked buffer for SSD matching on rotated templates.
+pub struct MaskedSsdTemplatePlan {
+    width: usize,
+    height: usize,
+    data: Vec<f32>,
+    mask: Arc<[u8]>,
+    angle_deg: f32,
+}
+
+impl MaskedSsdTemplatePlan {
+    /// Builds a masked SSD plan from a rotated template view and a binary mask.
+    pub fn from_rotated_u8(
+        rot: ImageView<'_, u8>,
+        mask: Vec<u8>,
+        angle_deg: f32,
+    ) -> CorrMatchResult<Self> {
+        Self::from_rotated_parts(rot, Arc::from(mask), angle_deg)
+    }
+
+    pub(crate) fn from_rotated_parts(
+        rot: ImageView<'_, u8>,
+        mask: Arc<[u8]>,
+        angle_deg: f32,
+    ) -> CorrMatchResult<Self> {
+        let width = rot.width();
+        let height = rot.height();
+        let needed = width
+            .checked_mul(height)
+            .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
+        if mask.len() < needed {
+            return Err(CorrMatchError::BufferTooSmall {
+                needed,
+                got: mask.len(),
+            });
+        }
+        if mask.len() > needed {
+            return Err(CorrMatchError::InvalidDimensions { width, height });
+        }
+
+        let mut data = Vec::with_capacity(needed);
+        let mut sum_w = 0usize;
+        for y in 0..height {
+            let row = rot.row(y).ok_or_else(|| {
+                let needed = (y + 1)
+                    .checked_mul(rot.stride())
+                    .and_then(|v| v.checked_add(rot.width()))
+                    .unwrap_or(usize::MAX);
+                CorrMatchError::BufferTooSmall {
+                    needed,
+                    got: rot.as_slice().len(),
+                }
+            })?;
+            for (x, &value) in row.iter().enumerate() {
+                let idx = y * width + x;
+                if mask[idx] != 0 {
+                    sum_w += 1;
+                }
+                data.push(value as f32);
+            }
+        }
+
+        if sum_w == 0 {
+            return Err(CorrMatchError::DegenerateTemplate {
+                reason: "mask has no valid pixels",
+            });
+        }
+
+        Ok(Self {
+            width,
+            height,
+            data,
+            mask,
+            angle_deg,
+        })
+    }
+
+    /// Returns the template width in pixels.
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Returns the template height in pixels.
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Returns the template buffer in row-major order.
+    pub fn data(&self) -> &[f32] {
+        &self.data
+    }
+
+    /// Returns the binary mask buffer (0 or 1 per pixel).
+    pub fn mask(&self) -> &[u8] {
+        self.mask.as_ref()
     }
 
     /// Returns the rotation angle in degrees.

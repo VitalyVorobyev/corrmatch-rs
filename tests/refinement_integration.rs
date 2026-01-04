@@ -1,6 +1,7 @@
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, RotationMode};
-use corrmatch::{ImageView, Template};
+use corrmatch::{
+    CompileConfig, CompileConfigNoRot, CompiledTemplate, ImageView, MatchConfig, Matcher,
+    RotationMode, Template,
+};
 
 fn make_template(width: usize, height: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(width * height);
@@ -53,17 +54,9 @@ fn refinement_handles_border_candidates() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
-        &template,
-        CompileConfig {
-            max_levels: 1,
-            coarse_step_deg: 45.0,
-            min_step_deg: 45.0,
-            fill_value: 0,
-            precompute_coarsest: true,
-        },
-    )
-    .unwrap();
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 1 })
+            .unwrap();
     let cfg = MatchConfig {
         max_image_levels: 1,
         beam_width: 4,
@@ -102,7 +95,7 @@ fn refinement_keeps_center_angle_on_symmetric_template() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 1,

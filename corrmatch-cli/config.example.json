@@ -1,0 +1,26 @@
+{
+  "image_path": "image.png",
+  "template_path": "template.png",
+  "output_path": "result.json",
+  "topk": 5,
+  "compile": {
+    "max_levels": 5,
+    "coarse_step_deg": 30.0,
+    "min_step_deg": 7.5,
+    "fill_value": 0,
+    "precompute_coarsest": true
+  },
+  "match": {
+    "metric": "zncc",
+    "rotation": "enabled",
+    "parallel": false,
+    "max_image_levels": 5,
+    "beam_width": 8,
+    "per_angle_topk": 3,
+    "nms_radius": 6,
+    "roi_radius": 8,
+    "angle_half_range_steps": 1,
+    "min_var_i": 1e-8,
+    "min_score": -1.0e9
+  }
+}

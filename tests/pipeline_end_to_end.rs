@@ -1,7 +1,8 @@
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, RotationMode};
-use corrmatch::template::rotate::rotate_u8_bilinear_masked;
-use corrmatch::{ImageView, Template};
+use corrmatch::lowlevel::rotate_u8_bilinear_masked;
+use corrmatch::{
+    CompileConfig, CompileConfigNoRot, CompiledTemplate, ImageView, MatchConfig, Matcher, Metric,
+    RotationMode, Template,
+};
 
 fn make_template(width: usize, height: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(width * height);
@@ -51,7 +52,7 @@ fn pipeline_finds_rotated_match() {
     }
 
     // Use a single level so rotation and downsampling do not introduce mismatch.
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 1,
@@ -115,7 +116,7 @@ fn pipeline_finds_translation_match() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 4,
@@ -154,7 +155,7 @@ fn angle_step_schedule_matches_expected() {
     let tpl_data = make_template(tpl_width, tpl_height);
     let template = Template::new(tpl_data, tpl_width, tpl_height).unwrap();
 
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 3,
@@ -194,17 +195,9 @@ fn pipeline_finds_translation_match_rotation_disabled() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
-        &template,
-        CompileConfig {
-            max_levels: 3,
-            coarse_step_deg: 45.0,
-            min_step_deg: 45.0,
-            fill_value: 0,
-            precompute_coarsest: true,
-        },
-    )
-    .unwrap();
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 3 })
+            .unwrap();
 
     let cfg = MatchConfig {
         max_image_levels: 3,
@@ -223,4 +216,84 @@ fn pipeline_finds_translation_match_rotation_disabled() {
     assert!((best.y - y0 as f32).abs() <= 1.0);
     assert!(angle_diff_deg(best.angle_deg, 0.0) <= 1e-6);
     assert!(best.score > 0.99);
+}
+
+#[test]
+fn pipeline_finds_translation_match_ssd_rotation_disabled() {
+    let tpl_width = 24;
+    let tpl_height = 20;
+    let tpl_data = make_template(tpl_width, tpl_height);
+    let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
+
+    let img_width = 120;
+    let img_height = 90;
+    let x0 = 17;
+    let y0 = 21;
+    let mut image = vec![0u8; img_width * img_height];
+    for y in 0..tpl_height {
+        for x in 0..tpl_width {
+            image[(y0 + y) * img_width + (x0 + x)] = tpl_data[y * tpl_width + x];
+        }
+    }
+
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 3 })
+            .unwrap();
+
+    let cfg = MatchConfig {
+        metric: Metric::Ssd,
+        rotation: RotationMode::Disabled,
+        max_image_levels: 3,
+        beam_width: 5,
+        per_angle_topk: 3,
+        roi_radius: 6,
+        nms_radius: 4,
+        ..MatchConfig::default()
+    };
+    let matcher = Matcher::new(compiled).with_config(cfg);
+    let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+    let best = matcher.match_image(image_view).unwrap();
+
+    assert!((best.x - x0 as f32).abs() <= 1.0);
+    assert!((best.y - y0 as f32).abs() <= 1.0);
+    assert!(best.score >= -1e-6);
+}
+
+#[test]
+fn pipeline_topk_returns_best_first() {
+    let tpl_width = 24;
+    let tpl_height = 18;
+    let tpl_data = make_template(tpl_width, tpl_height);
+    let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
+
+    let img_width = 120;
+    let img_height = 90;
+    let x0 = 19;
+    let y0 = 23;
+    let mut image = vec![0u8; img_width * img_height];
+    for y in 0..tpl_height {
+        for x in 0..tpl_width {
+            image[(y0 + y) * img_width + (x0 + x)] = tpl_data[y * tpl_width + x];
+        }
+    }
+
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 3 })
+            .unwrap();
+    let cfg = MatchConfig {
+        max_image_levels: 3,
+        rotation: RotationMode::Disabled,
+        ..MatchConfig::default()
+    };
+    let matcher = Matcher::new(compiled).with_config(cfg);
+    let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+
+    let best = matcher.match_image(image_view).unwrap();
+    let topk = matcher.match_image_topk(image_view, 3).unwrap();
+
+    assert!(!topk.is_empty());
+    assert!((topk[0].x - best.x).abs() < 1e-6);
+    assert!((topk[0].y - best.y).abs() < 1e-6);
+    assert!((topk[0].angle_deg - best.angle_deg).abs() < 1e-6);
+    assert!((topk[0].score - best.score).abs() < 1e-6);
 }

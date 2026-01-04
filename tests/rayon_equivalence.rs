@@ -1,9 +1,10 @@
 #![cfg(feature = "rayon")]
 
-use corrmatch::bank::{CompileConfig, CompiledTemplate};
-use corrmatch::search::{MatchConfig, Matcher, Metric, RotationMode};
-use corrmatch::template::rotate::rotate_u8_bilinear_masked;
-use corrmatch::{ImageView, Template};
+use corrmatch::lowlevel::rotate_u8_bilinear_masked;
+use corrmatch::{
+    CompileConfig, CompiledTemplate, ImageView, MatchConfig, Matcher, Metric, RotationMode,
+    Template,
+};
 
 fn make_template(width: usize, height: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(width * height);
@@ -41,7 +42,7 @@ fn parallel_matches_sequential_rotation_enabled() {
         }
     }
 
-    let compiled = CompiledTemplate::compile(
+    let compiled = CompiledTemplate::compile_rotated(
         &template,
         CompileConfig {
             max_levels: 2,
@@ -76,7 +77,7 @@ fn parallel_matches_sequential_rotation_enabled() {
     };
     let seq_matcher = Matcher::new(compiled).with_config(seq_cfg);
     let par_matcher = Matcher::new(
-        CompiledTemplate::compile(
+        CompiledTemplate::compile_rotated(
             &template,
             CompileConfig {
                 max_levels: 2,

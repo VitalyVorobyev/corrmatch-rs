@@ -9,7 +9,7 @@ pub struct Peak {
     pub x: usize,
     /// Y coordinate (row) of the peak.
     pub y: usize,
-    /// ZNCC score at the peak location.
+    /// Score at the peak location (metric-dependent).
     pub score: f32,
     /// Index into the angle grid.
     pub angle_idx: usize,
