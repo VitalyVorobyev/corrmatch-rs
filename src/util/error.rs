@@ -42,4 +42,7 @@ pub enum CorrMatchError {
         len: usize,
         context: &'static str,
     },
+    /// The search did not produce any valid candidates.
+    #[error("no candidates: {reason}")]
+    NoCandidates { reason: &'static str },
 }

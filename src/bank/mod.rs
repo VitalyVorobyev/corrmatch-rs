@@ -50,6 +50,12 @@ pub(crate) struct RotatedTemplate {
     plan: MaskedTemplatePlan,
 }
 
+impl RotatedTemplate {
+    pub(crate) fn plan(&self) -> &MaskedTemplatePlan {
+        &self.plan
+    }
+}
+
 struct LevelBank {
     grid: AngleGrid,
     slots: Vec<OnceLock<RotatedTemplate>>,
@@ -69,23 +75,29 @@ impl CompiledTemplate {
         let levels = pyramid.into_levels();
 
         let mut banks = Vec::with_capacity(levels.len());
+        let coarsest_idx = levels.len().saturating_sub(1);
         for (level_idx, _level) in levels.iter().enumerate() {
-            let step = (cfg.coarse_step_deg / 2.0_f32.powi(level_idx as i32)).max(cfg.min_step_deg);
+            let shift = coarsest_idx.saturating_sub(level_idx);
+            let factor = (1u64.checked_shl(shift as u32).unwrap_or(u64::MAX)) as f32;
+            let step = (cfg.coarse_step_deg / factor).max(cfg.min_step_deg);
             let grid = AngleGrid::full(step)?;
             let slots = (0..grid.len()).map(|_| OnceLock::new()).collect();
             banks.push(LevelBank { grid, slots });
         }
 
         if cfg.precompute_coarsest {
-            let level0 = levels.first().ok_or(CorrMatchError::IndexOutOfBounds {
-                index: 0,
-                len: levels.len(),
-                context: "level",
-            })?;
-            if let Some(bank) = banks.get_mut(0) {
+            let coarsest_idx = levels.len().saturating_sub(1);
+            let coarsest = levels
+                .get(coarsest_idx)
+                .ok_or(CorrMatchError::IndexOutOfBounds {
+                    index: coarsest_idx,
+                    len: levels.len(),
+                    context: "level",
+                })?;
+            if let Some(bank) = banks.get_mut(coarsest_idx) {
                 for (idx, angle) in bank.grid.iter().enumerate() {
                     let (rotated_img, mask) =
-                        rotate_u8_bilinear_masked(level0.view(), angle, cfg.fill_value);
+                        rotate_u8_bilinear_masked(coarsest.view(), angle, cfg.fill_value);
                     let plan =
                         MaskedTemplatePlan::from_rotated_u8(rotated_img.view(), mask, angle)?;
                     let rotated = RotatedTemplate {

@@ -9,3 +9,6 @@
 - Add tests for angle grids, rotations, and cache behavior.
 - Add masked rotation plans for ZNCC and scalar masked scan with Top-K support.
 - Add spatial NMS helper and masked ZNCC correctness tests.
+- Add coarse-to-fine matcher with joint angle search and ROI refinement.
+- Add scan helpers for full-range and ROI masked ZNCC evaluation.
+- Add end-to-end pipeline tests and angle-step scheduling coverage.
