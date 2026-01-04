@@ -74,15 +74,18 @@ fn compiled_template_caches_rotations() {
 
     let grid = compiled.angle_grid(0).unwrap();
     let idx = grid.nearest_index(0.0);
-    let first = compiled.rotated_view(0, idx).unwrap();
-    let second = compiled.rotated_view(0, idx).unwrap();
+    let first = compiled.rotated_plan(0, idx).unwrap();
+    let second = compiled.rotated_plan(0, idx).unwrap();
 
-    assert_eq!(first.as_slice(), template.view().as_slice());
-    assert!(std::ptr::eq(first.as_slice(), second.as_slice()));
+    assert_eq!(first.width(), width);
+    assert_eq!(first.height(), height);
+    assert!(std::ptr::eq(first, second));
+    let expected_sum_w = (width - 1) as f32 * (height - 1) as f32;
+    assert!((first.sum_w() - expected_sum_w).abs() < 1e-6);
 
     let grid1 = compiled.angle_grid(1).unwrap();
     let idx1 = grid1.nearest_index(45.0);
-    let view1 = compiled.rotated_view(1, idx1).unwrap();
-    assert_eq!(view1.width(), width / 2);
-    assert_eq!(view1.height(), height / 2);
+    let plan1 = compiled.rotated_plan(1, idx1).unwrap();
+    assert_eq!(plan1.width(), width / 2);
+    assert_eq!(plan1.height(), height / 2);
 }

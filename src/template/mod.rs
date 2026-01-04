@@ -6,7 +6,7 @@ use crate::util::CorrMatchResult;
 mod plan;
 pub mod rotate;
 
-pub use plan::TemplatePlan;
+pub use plan::{MaskedTemplatePlan, TemplatePlan};
 
 /// Owned template image in contiguous grayscale format.
 pub struct Template {

@@ -1,18 +1,20 @@
 //! Precomputed template assets for coarse-to-fine search.
 //!
 //! Compiling template assets once amortizes the cost of building pyramids and
-//! rotated variants across multiple match calls. Rotated templates are cached
-//! lazily per level; each angle slot is populated at most once and stored in a
-//! `OnceLock` for thread-safe reuse when parallel search is introduced later.
+//! rotated variants across multiple match calls. Each cached rotation stores a
+//! precomputed masked plan (`t'`, `sum_w`, `var_t`) for fast ZNCC evaluation.
+//! Rotated templates are cached lazily per level; each angle slot is populated
+//! at most once and stored in a `OnceLock` for thread-safe reuse when parallel
+//! search is introduced later.
 
 mod angles;
 
 pub use angles::AngleGrid;
 
 use crate::image::pyramid::ImagePyramid;
-use crate::image::{ImageView, OwnedImage};
-use crate::template::rotate::rotate_u8_bilinear;
-use crate::template::{Template, TemplatePlan};
+use crate::image::OwnedImage;
+use crate::template::rotate::rotate_u8_bilinear_masked;
+use crate::template::{MaskedTemplatePlan, Template};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use std::sync::OnceLock;
 
@@ -45,8 +47,7 @@ impl Default for CompileConfig {
 
 pub(crate) struct RotatedTemplate {
     angle_deg: f32,
-    img: OwnedImage,
-    plan: TemplatePlan,
+    plan: MaskedTemplatePlan,
 }
 
 struct LevelBank {
@@ -83,11 +84,12 @@ impl CompiledTemplate {
             })?;
             if let Some(bank) = banks.get_mut(0) {
                 for (idx, angle) in bank.grid.iter().enumerate() {
-                    let rotated_img = rotate_u8_bilinear(level0.view(), angle, cfg.fill_value);
-                    let plan = TemplatePlan::from_view(rotated_img.view())?;
+                    let (rotated_img, mask) =
+                        rotate_u8_bilinear_masked(level0.view(), angle, cfg.fill_value);
+                    let plan =
+                        MaskedTemplatePlan::from_rotated_u8(rotated_img.view(), mask, angle)?;
                     let rotated = RotatedTemplate {
                         angle_deg: angle,
-                        img: rotated_img,
                         plan,
                     };
                     let _ = bank.slots[idx].set(rotated);
@@ -115,13 +117,13 @@ impl CompiledTemplate {
         self.banks.get(level).map(|bank| &bank.grid)
     }
 
-    /// Returns a view of a rotated template, computing it lazily if needed.
-    pub fn rotated_view(
+    /// Returns a masked template plan for a given level and angle.
+    pub fn rotated_plan(
         &self,
         level: usize,
         angle_idx: usize,
-    ) -> CorrMatchResult<ImageView<'_, u8>> {
-        Ok(self.rotated(level, angle_idx)?.img.view())
+    ) -> CorrMatchResult<&MaskedTemplatePlan> {
+        Ok(&self.rotated(level, angle_idx)?.plan)
     }
 
     pub(crate) fn rotated(
@@ -160,11 +162,11 @@ impl CompiledTemplate {
             debug_assert_eq!(rotated.plan.height(), level_img.height());
             return Ok(rotated);
         }
-        let rotated_img = rotate_u8_bilinear(level_img.view(), angle, self.cfg.fill_value);
-        let plan = TemplatePlan::from_view(rotated_img.view())?;
+        let (rotated_img, mask) =
+            rotate_u8_bilinear_masked(level_img.view(), angle, self.cfg.fill_value);
+        let plan = MaskedTemplatePlan::from_rotated_u8(rotated_img.view(), mask, angle)?;
         let rotated = RotatedTemplate {
             angle_deg: angle,
-            img: rotated_img,
             plan,
         };
         let _ = slot.set(rotated);
