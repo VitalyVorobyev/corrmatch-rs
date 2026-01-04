@@ -4,6 +4,9 @@
 //! The stride counts elements between the starts of consecutive rows, so a
 //! stride larger than the width represents padded rows. ROI slices are zero-copy
 //! views into the same backing slice and retain the original stride.
+//!
+//! `OwnedImage` stores a contiguous grayscale image and can provide an
+//! `ImageView` into its buffer.
 
 use crate::util::{CorrMatchError, CorrMatchResult};
 
@@ -165,4 +168,94 @@ fn required_len(width: usize, height: usize, stride: usize) -> CorrMatchResult<u
         .and_then(|v| v.checked_add(width))
         .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
     Ok(needed)
+}
+
+/// Owned contiguous grayscale image buffer.
+pub struct OwnedImage {
+    data: Vec<u8>,
+    width: usize,
+    height: usize,
+    stride: usize,
+}
+
+impl OwnedImage {
+    /// Creates an owned image from a contiguous grayscale buffer.
+    pub fn new(data: Vec<u8>, width: usize, height: usize) -> CorrMatchResult<Self> {
+        if width == 0 || height == 0 {
+            return Err(CorrMatchError::InvalidDimensions { width, height });
+        }
+        let needed = width
+            .checked_mul(height)
+            .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
+        if data.len() < needed {
+            return Err(CorrMatchError::BufferTooSmall {
+                needed,
+                got: data.len(),
+            });
+        }
+        if data.len() > needed {
+            return Err(CorrMatchError::InvalidDimensions { width, height });
+        }
+        Ok(Self {
+            data,
+            width,
+            height,
+            stride: width,
+        })
+    }
+
+    pub(crate) fn from_view(view: ImageView<'_, u8>) -> CorrMatchResult<Self> {
+        let width = view.width();
+        let height = view.height();
+        let needed = width
+            .checked_mul(height)
+            .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
+        let mut data = vec![0u8; needed];
+        for y in 0..height {
+            let row = view.row(y).ok_or_else(|| {
+                let needed = (y + 1)
+                    .checked_mul(view.stride())
+                    .and_then(|v| v.checked_add(view.width()))
+                    .unwrap_or(usize::MAX);
+                CorrMatchError::BufferTooSmall {
+                    needed,
+                    got: view.as_slice().len(),
+                }
+            })?;
+            let start = y * width;
+            let end = start + width;
+            data[start..end].copy_from_slice(row);
+        }
+        Self::new(data, width, height)
+    }
+
+    /// Returns a borrowed view of the image.
+    pub fn view(&self) -> ImageView<'_, u8> {
+        ImageView {
+            data: &self.data,
+            width: self.width,
+            height: self.height,
+            stride: self.stride,
+        }
+    }
+
+    /// Returns the backing buffer in row-major order.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Returns the image width in pixels.
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Returns the image height in pixels.
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Returns the row stride in elements (equal to width for owned images).
+    pub fn stride(&self) -> usize {
+        self.stride
+    }
 }

@@ -1,11 +1,10 @@
 //! Template storage and planning utilities.
 
-use crate::image::pyramid::OwnedImage;
-use crate::image::ImageView;
+use crate::image::{ImageView, OwnedImage};
 use crate::util::CorrMatchResult;
 
 mod plan;
-pub(crate) mod rotate;
+pub mod rotate;
 
 pub use plan::TemplatePlan;
 
@@ -17,7 +16,7 @@ pub struct Template {
 impl Template {
     /// Creates a template from a contiguous grayscale buffer.
     pub fn new(data: Vec<u8>, width: usize, height: usize) -> CorrMatchResult<Self> {
-        let img = OwnedImage::from_vec(data, width, height)?;
+        let img = OwnedImage::new(data, width, height)?;
         Ok(Self { img })
     }
 

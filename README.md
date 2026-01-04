@@ -11,6 +11,7 @@ reproducible matching with a minimal dependency footprint.
 
 ## Current building blocks
 ```rust
+use corrmatch::bank::{CompileConfig, CompiledTemplate};
 use corrmatch::{CorrMatchResult, ImagePyramid, ImageView, Template, TemplatePlan};
 
 fn prepare_plan(
@@ -26,6 +27,15 @@ fn prepare_plan(
     let template = Template::new(tpl, tpl_width, tpl_height)?;
     TemplatePlan::from_view(template.view())
 }
+
+fn compile_template(
+    tpl: Vec<u8>,
+    tpl_width: usize,
+    tpl_height: usize,
+) -> CorrMatchResult<CompiledTemplate> {
+    let template = Template::new(tpl, tpl_width, tpl_height)?;
+    CompiledTemplate::compile(&template, CompileConfig::default())
+}
 ```
 
 ## Planned API sketch
@@ -39,4 +49,5 @@ use corrmatch::CorrMatchResult;
 ```
 
 ## Status
-Core data types are implemented; matching algorithms are not implemented yet.
+Core data types and compiled template assets are implemented; matching
+algorithms are not implemented yet.

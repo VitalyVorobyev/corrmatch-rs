@@ -3,7 +3,7 @@ name = "corrmatch"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "TODO"
+repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
 categories = ["algorithms", "multimedia::images", "science"]
 keywords = ["template-matching", "image-processing", "zncc", "pyramid", "rotation"]
 
