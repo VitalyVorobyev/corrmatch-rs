@@ -85,5 +85,6 @@ use corrmatch::CorrMatchResult;
 ```
 
 ## Status
-Core data types, compiled template assets, and a baseline coarse-to-fine matcher
-are implemented; higher-level APIs and SIMD/parallel acceleration are pending.
+Core data types, compiled template assets, a coarse-to-fine matcher, and
+subpixel/subangle refinement are implemented; higher-level APIs and
+SIMD/parallel acceleration are pending.

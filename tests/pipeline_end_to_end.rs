@@ -78,12 +78,12 @@ fn pipeline_finds_rotated_match() {
     let best = matcher.match_image(image_view).unwrap();
 
     assert!(
-        best.x.abs_diff(x0) <= 4,
+        (best.x - x0 as f32).abs() <= 4.0,
         "expected x near {x0}, got {}",
         best.x
     );
     assert!(
-        best.y.abs_diff(y0) <= 4,
+        (best.y - y0 as f32).abs() <= 4.0,
         "expected y near {y0}, got {}",
         best.y
     );
@@ -125,6 +125,7 @@ fn pipeline_finds_translation_match() {
         },
     )
     .unwrap();
+    let step = compiled.angle_grid(0).unwrap().step_deg();
 
     let cfg = MatchConfig {
         beam_width: 6,
@@ -138,9 +139,9 @@ fn pipeline_finds_translation_match() {
     let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
     let best = matcher.match_image(image_view).unwrap();
 
-    assert_eq!(best.x, x0);
-    assert_eq!(best.y, y0);
-    assert!(angle_diff_deg(best.angle_deg, 0.0) <= 1e-6);
+    assert!((best.x - x0 as f32).abs() <= 1.0);
+    assert!((best.y - y0 as f32).abs() <= 1.0);
+    assert!(angle_diff_deg(best.angle_deg, 0.0) <= step + 1e-6);
     assert!(best.score > 0.99);
 }
 

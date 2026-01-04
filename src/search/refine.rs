@@ -5,8 +5,11 @@
 
 use crate::bank::CompiledTemplate;
 use crate::candidate::topk::Peak;
-use crate::search::scan::scan_masked_zncc_scalar_roi;
-use crate::search::MatchConfig;
+use crate::refine::quad1d::quad_peak_offset_1d;
+use crate::refine::quad2d::refine_subpixel_2d;
+use crate::search::scan::{scan_masked_zncc_scalar_roi, score_masked_zncc_at};
+use crate::search::{Match, MatchConfig};
+use crate::util::math::wrap_deg;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
@@ -163,4 +166,109 @@ pub(crate) fn refine_to_finer_level(
     }
 
     Ok(out)
+}
+
+/// Refines the best candidate at the finest level with subpixel and subangle fits.
+pub(crate) fn refine_final_match(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    level: usize,
+    best: Candidate,
+    cfg: &MatchConfig,
+) -> CorrMatchResult<Match> {
+    let grid = compiled
+        .angle_grid(level)
+        .ok_or(CorrMatchError::IndexOutOfBounds {
+            index: level,
+            len: compiled.num_levels(),
+            context: "level",
+        })?;
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
+
+    let img_width = image.width();
+    let img_height = image.height();
+    if img_width < tpl_width || img_height < tpl_height {
+        return Err(CorrMatchError::RoiOutOfBounds {
+            x: best.x,
+            y: best.y,
+            width: tpl_width,
+            height: tpl_height,
+            img_width,
+            img_height,
+        });
+    }
+    let max_x = img_width - tpl_width;
+    let max_y = img_height - tpl_height;
+    if best.x > max_x || best.y > max_y {
+        return Err(CorrMatchError::RoiOutOfBounds {
+            x: best.x,
+            y: best.y,
+            width: tpl_width,
+            height: tpl_height,
+            img_width,
+            img_height,
+        });
+    }
+
+    let plan = compiled.rotated(level, best.angle_idx)?.plan();
+
+    let mut s = [[f32::NEG_INFINITY; 3]; 3];
+    let offsets = [-1isize, 0, 1];
+    for (iy, &dy) in offsets.iter().enumerate() {
+        let y = best.y as isize + dy;
+        if y < 0 || y > max_y as isize {
+            continue;
+        }
+        for (ix, &dx) in offsets.iter().enumerate() {
+            let x = best.x as isize + dx;
+            if x < 0 || x > max_x as isize {
+                continue;
+            }
+            s[iy][ix] = score_masked_zncc_at(image, plan, x as usize, y as usize, cfg.min_var_i);
+        }
+    }
+
+    let center_score = if s[1][1].is_finite() {
+        s[1][1]
+    } else {
+        best.score
+    };
+    let (x_ref, y_ref) = refine_subpixel_2d(best.x, best.y, s);
+
+    let len = grid.len();
+    debug_assert!(len > 0);
+    let center_angle = grid.angle_at(best.angle_idx);
+    let step = grid.step_deg();
+    let im = (best.angle_idx + len - 1) % len;
+    let ip = (best.angle_idx + 1) % len;
+    let sm = score_masked_zncc_at(
+        image,
+        compiled.rotated(level, im)?.plan(),
+        best.x,
+        best.y,
+        cfg.min_var_i,
+    );
+    let sp = score_masked_zncc_at(
+        image,
+        compiled.rotated(level, ip)?.plan(),
+        best.x,
+        best.y,
+        cfg.min_var_i,
+    );
+    let angle_offset = quad_peak_offset_1d(sm, center_score, sp).unwrap_or(0.0);
+    let angle_deg = wrap_deg(center_angle + angle_offset * step);
+
+    Ok(Match {
+        x: x_ref,
+        y: y_ref,
+        angle_deg,
+        score: center_score,
+    })
 }
