@@ -2,13 +2,17 @@
 //!
 //! This crate currently provides scaffolding only; algorithms are not implemented yet.
 
+pub mod image;
+pub mod template;
+pub mod util;
+
 mod bank;
 mod candidate;
-mod image;
 mod kernel;
 mod refine;
 mod search;
-mod template;
-mod util;
 
-pub use util::error::{CorrMatchError, Result};
+pub use image::pyramid::ImagePyramid;
+pub use image::ImageView;
+pub use template::{Template, TemplatePlan};
+pub use util::{CorrMatchError, CorrMatchResult};

@@ -1,4 +1,6 @@
 //! Shared utility helpers.
 
-pub(crate) mod error;
+pub mod error;
 pub(crate) mod math;
+
+pub use error::{CorrMatchError, CorrMatchResult};
