@@ -6,19 +6,24 @@
 use crate::bank::CompiledTemplate;
 use crate::candidate::nms::nms_2d;
 use crate::candidate::topk::Peak;
-use crate::kernel::scalar::{
-    SsdMaskedScalar, SsdUnmaskedScalar, ZnccMaskedScalar, ZnccUnmaskedScalar,
-};
+use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
 use crate::kernel::{Kernel, ScanParams};
 use crate::refine::quad1d::quad_peak_offset_1d;
 use crate::refine::quad2d::refine_subpixel_2d;
 use crate::search::{Match, MatchConfig, Metric};
+use crate::trace::{trace_event, trace_span};
 use crate::util::math::wrap_deg;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
+
+// Kernel type aliases for unmasked kernels - use SIMD when available
+#[cfg(not(feature = "simd"))]
+use crate::kernel::scalar::{SsdUnmaskedScalar as SsdUnmasked, ZnccUnmaskedScalar as ZnccUnmasked};
+#[cfg(feature = "simd")]
+use crate::kernel::simd::{SsdUnmaskedSimd as SsdUnmasked, ZnccUnmaskedSimd as ZnccUnmasked};
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Candidate {
     pub(crate) level: usize,
@@ -90,6 +95,8 @@ pub(crate) fn refine_to_finer_level(
     prev: &[Candidate],
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("refine_level", level = finer_level, candidates = prev.len()).entered();
+
     if prev.is_empty() {
         return Ok(Vec::new());
     }
@@ -176,6 +183,7 @@ pub(crate) fn refine_to_finer_level(
         out.push(Candidate::from_peak(finer_level, angle_deg, peak));
     }
 
+    trace_event!("refined_candidates", count = out.len());
     Ok(out)
 }
 
@@ -187,6 +195,8 @@ pub(crate) fn refine_to_finer_level_unmasked(
     prev: &[Candidate],
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("refine_level", level = finer_level, candidates = prev.len()).entered();
+
     if prev.is_empty() {
         return Ok(Vec::new());
     }
@@ -232,7 +242,7 @@ pub(crate) fn refine_to_finer_level_unmasked(
                     Some(bounds) => bounds,
                     None => continue,
                 };
-                let peaks = <ZnccUnmaskedScalar as Kernel>::scan_roi(
+                let peaks = <ZnccUnmasked as Kernel>::scan_roi(
                     image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
                 )?;
                 all_peaks.extend(peaks);
@@ -247,7 +257,7 @@ pub(crate) fn refine_to_finer_level_unmasked(
                     Some(bounds) => bounds,
                     None => continue,
                 };
-                let peaks = <SsdUnmaskedScalar as Kernel>::scan_roi(
+                let peaks = <SsdUnmasked as Kernel>::scan_roi(
                     image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
                 )?;
                 all_peaks.extend(peaks);
@@ -269,6 +279,7 @@ pub(crate) fn refine_to_finer_level_unmasked(
         out.push(Candidate::from_peak(finer_level, 0.0, peak));
     }
 
+    trace_event!("refined_candidates", count = out.len());
     Ok(out)
 }
 
@@ -281,6 +292,14 @@ pub(crate) fn refine_to_finer_level_par(
     prev: &[Candidate],
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!(
+        "refine_level",
+        level = finer_level,
+        candidates = prev.len(),
+        parallel = true
+    )
+    .entered();
+
     if prev.is_empty() {
         return Ok(Vec::new());
     }
@@ -377,6 +396,7 @@ pub(crate) fn refine_to_finer_level_par(
         out.push(Candidate::from_peak(finer_level, angle_deg, peak));
     }
 
+    trace_event!("refined_candidates", count = out.len());
     Ok(out)
 }
 
@@ -389,6 +409,14 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
     prev: &[Candidate],
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!(
+        "refine_level",
+        level = finer_level,
+        candidates = prev.len(),
+        parallel = true
+    )
+    .entered();
+
     if prev.is_empty() {
         return Ok(Vec::new());
     }
@@ -435,7 +463,7 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
                         Some(bounds) => bounds,
                         None => return Ok(Vec::new()),
                     };
-                    <ZnccUnmaskedScalar as Kernel>::scan_roi(
+                    <ZnccUnmasked as Kernel>::scan_roi(
                         image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
                     )
                 })
@@ -452,7 +480,7 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
                         Some(bounds) => bounds,
                         None => return Ok(Vec::new()),
                     };
-                    <SsdUnmaskedScalar as Kernel>::scan_roi(
+                    <SsdUnmasked as Kernel>::scan_roi(
                         image, plan, 0, roi.0, roi.1, roi.2, roi.3, params,
                     )
                 })
@@ -478,6 +506,7 @@ pub(crate) fn refine_to_finer_level_unmasked_par(
         out.push(Candidate::from_peak(finer_level, 0.0, peak));
     }
 
+    trace_event!("refined_candidates", count = out.len());
     Ok(out)
 }
 
@@ -489,6 +518,8 @@ pub(crate) fn refine_final_match(
     best: Candidate,
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Match> {
+    let _span = trace_span!("final_refinement").entered();
+
     let grid = compiled
         .angle_grid(level)
         .ok_or(CorrMatchError::IndexOutOfBounds {
@@ -647,6 +678,8 @@ pub(crate) fn refine_final_match_unmasked(
     best: Candidate,
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Match> {
+    let _span = trace_span!("final_refinement").entered();
+
     let (tpl_width, tpl_height) =
         compiled
             .level_size(level)
@@ -696,7 +729,7 @@ pub(crate) fn refine_final_match_unmasked(
                     if x < 0 || x > max_x as isize {
                         continue;
                     }
-                    s[iy][ix] = <ZnccUnmaskedScalar as Kernel>::score_at(
+                    s[iy][ix] = <ZnccUnmasked as Kernel>::score_at(
                         image,
                         plan,
                         x as usize,
@@ -718,7 +751,7 @@ pub(crate) fn refine_final_match_unmasked(
                     if x < 0 || x > max_x as isize {
                         continue;
                     }
-                    s[iy][ix] = <SsdUnmaskedScalar as Kernel>::score_at(
+                    s[iy][ix] = <SsdUnmasked as Kernel>::score_at(
                         image,
                         plan,
                         x as usize,

@@ -10,12 +10,20 @@ use crate::ImageView;
 pub struct ZnccMaskedScalar;
 
 /// Scalar unmasked ZNCC kernel for rotation-free matching.
+///
+/// When the `simd` feature is enabled, this kernel may be unused in favor of
+/// the SIMD variant.
+#[allow(dead_code)]
 pub struct ZnccUnmaskedScalar;
 
 /// Scalar masked SSD kernel for rotated templates.
 pub struct SsdMaskedScalar;
 
 /// Scalar unmasked SSD kernel for rotation-free matching.
+///
+/// When the `simd` feature is enabled, this kernel may be unused in favor of
+/// the SIMD variant.
+#[allow(dead_code)]
 pub struct SsdUnmaskedScalar;
 
 impl ZnccMaskedScalar {
@@ -383,7 +391,7 @@ impl SsdMaskedScalar {
 }
 
 impl ZnccUnmaskedScalar {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     fn scan_range(
         image: ImageView<'_, u8>,
         tpl: &TemplatePlan,
@@ -655,7 +663,7 @@ impl Kernel for SsdUnmaskedScalar {
 }
 
 impl SsdUnmaskedScalar {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code, clippy::too_many_arguments)]
     fn scan_range(
         image: ImageView<'_, u8>,
         tpl: &SsdTemplatePlan,

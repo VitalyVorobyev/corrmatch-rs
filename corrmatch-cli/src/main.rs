@@ -7,6 +7,7 @@ use corrmatch::{
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use tracing_subscriber::EnvFilter;
 
 const SCHEMA_JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/config.schema.json"));
 const EXAMPLE_JSON: &str =
@@ -24,6 +25,9 @@ struct Cli {
     /// Print an example config and exit.
     #[arg(long)]
     print_example: bool,
+    /// Enable tracing output for performance profiling.
+    #[arg(long)]
+    trace: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -168,6 +172,14 @@ struct Output {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    if cli.trace {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env().add_directive("corrmatch=info".parse()?))
+            .with_target(false)
+            .init();
+    }
+
     if cli.print_schema {
         println!("{SCHEMA_JSON}");
         return Ok(());

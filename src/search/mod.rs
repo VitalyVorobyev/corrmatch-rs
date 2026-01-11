@@ -180,6 +180,13 @@ impl Matcher {
     ///
     /// When rotation is disabled, angle-related settings are ignored.
     pub fn match_image(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Match> {
+        let _span = trace_span!(
+            "match_image",
+            width = image.width(),
+            height = image.height()
+        )
+        .entered();
+
         self.cfg.validate()?;
         let seeds = self.match_candidates(image)?;
         let best = seeds[0];
@@ -246,6 +253,13 @@ impl Matcher {
         let use_parallel = self.cfg.use_parallel();
         let pyramid = ImagePyramid::build_u8(image, self.cfg.max_image_levels)?;
         let num_levels = pyramid.levels().len().min(self.compiled.num_levels());
+
+        let _span = trace_span!(
+            "coarse_to_fine",
+            levels = num_levels,
+            parallel = use_parallel
+        )
+        .entered();
         if num_levels == 0 {
             return Err(CorrMatchError::InvalidDimensions {
                 width: image.width(),
