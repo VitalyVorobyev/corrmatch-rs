@@ -1,5 +1,8 @@
 use corrmatch::lowlevel::TemplatePlan;
-use corrmatch::{CorrMatchError, ImagePyramid, ImageView, Template};
+use corrmatch::{
+    CompileConfig, CompileConfigNoRot, CompiledTemplate, CorrMatchError, ImagePyramid, ImageView,
+    Template,
+};
 
 #[test]
 fn image_view_rejects_invalid_dimensions() {
@@ -123,4 +126,42 @@ fn template_plan_rejects_degenerate_templates() {
             reason: "zero variance",
         }
     );
+}
+
+#[test]
+fn compiled_template_trims_degenerate_coarsest_levels() {
+    let tpl_width = 4;
+    let tpl_height = 4;
+    let tpl_data: Vec<u8> = (0u8..16).collect();
+    let template = Template::new(tpl_data, tpl_width, tpl_height).unwrap();
+
+    let compiled =
+        CompiledTemplate::compile_unrotated(&template, CompileConfigNoRot { max_levels: 10 })
+            .unwrap();
+
+    assert_eq!(compiled.num_levels(), 2);
+    let (w, h) = compiled.level_size(compiled.num_levels() - 1).unwrap();
+    assert_eq!((w, h), (2, 2));
+}
+
+#[test]
+fn compiled_rotated_skips_too_small_levels() {
+    let tpl_width = 4;
+    let tpl_height = 4;
+    let tpl_data: Vec<u8> = (0u8..16).collect();
+    let template = Template::new(tpl_data, tpl_width, tpl_height).unwrap();
+
+    let compiled = CompiledTemplate::compile_rotated(
+        &template,
+        CompileConfig {
+            max_levels: 10,
+            precompute_coarsest: false,
+            ..CompileConfig::default()
+        },
+    )
+    .unwrap();
+
+    assert!(compiled.num_levels() >= 1);
+    let (w, h) = compiled.level_size(compiled.num_levels() - 1).unwrap();
+    assert!(w >= 3 && h >= 3);
 }

@@ -92,6 +92,40 @@ impl Default for MatchConfig {
 }
 
 impl MatchConfig {
+    /// Validates the configuration, returning an error if any parameter is invalid.
+    pub fn validate(&self) -> CorrMatchResult<()> {
+        if self.beam_width == 0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "beam_width must be at least 1",
+            });
+        }
+        if self.per_angle_topk == 0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "per_angle_topk must be at least 1",
+            });
+        }
+        if self.max_image_levels == 0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "max_image_levels must be at least 1",
+            });
+        }
+        if !self.min_var_i.is_finite() || self.min_var_i < 0.0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "min_var_i must be a non-negative finite value",
+            });
+        }
+        if !self.min_score.is_finite() && self.min_score != f32::NEG_INFINITY {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "min_score must be finite or NEG_INFINITY",
+            });
+        }
+        #[cfg(not(feature = "rayon"))]
+        if self.parallel {
+            return Err(CorrMatchError::ParallelUnavailable);
+        }
+        Ok(())
+    }
+
     pub(crate) fn use_parallel(&self) -> bool {
         self.parallel && cfg!(feature = "rayon")
     }
@@ -126,15 +160,27 @@ impl Matcher {
     }
 
     /// Replaces the matcher configuration.
+    ///
+    /// Use `try_with_config` for validation of the configuration.
     pub fn with_config(mut self, cfg: MatchConfig) -> Self {
         self.cfg = cfg;
         self
+    }
+
+    /// Replaces the matcher configuration with validation.
+    ///
+    /// Returns an error if the configuration is invalid.
+    pub fn try_with_config(mut self, cfg: MatchConfig) -> CorrMatchResult<Self> {
+        cfg.validate()?;
+        self.cfg = cfg;
+        Ok(self)
     }
 
     /// Matches a template against an image and returns the best candidate.
     ///
     /// When rotation is disabled, angle-related settings are ignored.
     pub fn match_image(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Match> {
+        self.cfg.validate()?;
         let seeds = self.match_candidates(image)?;
         let best = seeds[0];
         let refined = match self.cfg.rotation {
@@ -160,6 +206,7 @@ impl Matcher {
         image: ImageView<'_, u8>,
         k: usize,
     ) -> CorrMatchResult<Vec<Match>> {
+        self.cfg.validate()?;
         if k == 0 {
             return Ok(Vec::new());
         }

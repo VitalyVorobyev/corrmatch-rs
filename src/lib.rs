@@ -27,6 +27,15 @@
 //! - `Template`: owned template pixels.
 //! - `CompiledTemplate`: precomputed template pyramid and (optionally) angle banks.
 //! - `Matcher`: runs the coarse-to-fine search and returns the best match.
+//! - `CompiledTemplate::compile_unrotated`: lightweight assets for translation-only matching.
+//!
+//! # Data model
+//! - Images and templates are grayscale `u8` buffers in row-major order.
+//! - `ImageView` supports explicit row stride; results report top-left coordinates at level 0.
+//! - Scores: ZNCC in roughly `[-1, 1]`, SSD reported as negative SSE (higher is better).
+//!
+//! # Determinism
+//! Matching is deterministic; enabling `rayon` via `MatchConfig.parallel` keeps results stable.
 //!
 //! # Feature flags
 //! - `rayon`: parallel search execution.

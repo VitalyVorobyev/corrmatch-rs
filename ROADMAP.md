@@ -44,9 +44,42 @@ Acceptance: results match scalar within documented floating tolerance.
 Deliverables: runnable examples, image-io optional path, criterion benches.
 Acceptance: examples and benches are reproducible and documented.
 
+### 8. Python bindings via PyO3
+Deliverables: `corrmatch-py` crate, high-level Python API, maturin build.
+Acceptance: `import corrmatch` works with numpy arrays for image/template.
+
+### 9. Synthetic test validation
+Deliverables: ground-truth synthetic cases, Rust and Python validation suites.
+Acceptance: all generated cases pass within tolerance (position ±3px, angle ±2°).
+
+### 10. SSD metric support
+Deliverables: Sum of Squared Differences as alternative to ZNCC.
+Acceptance: SSD produces valid matches and passes synthetic tests.
+
 ## v1 scope
-- CPU-only template matching with ZNCC scoring.
+- CPU-only template matching with ZNCC and SSD scoring.
 - Coarse-to-fine pyramid search with hierarchical rotation refinement.
 - Top-K + NMS candidate pruning and quadratic final fits.
 - Optional rayon and SIMD acceleration behind feature flags.
+- Python bindings for numpy-based workflows.
 - Clear docs, examples, and benchmarks for typical template sizes.
+
+## Current status (2026-01)
+
+**Completed:**
+- Milestones 0-6 (core library, pyramids, refinement, deterministic rayon)
+- Milestone 8 (Python bindings via PyO3 + maturin)
+- Milestone 9 (synthetic validation in Rust + Python)
+- Milestone 10 (SSD metric)
+- CLI tool (corrmatch-cli)
+- Synthetic case generator (tools/synth_cases)
+- Code review and bug fixes (rotation bounds, config validation)
+
+**In Progress:**
+- Milestone 7 (docs/examples/benches) - expand examples and document benchmark usage
+- Milestone 6 SIMD kernels (partial) - validate parity and tolerances
+
+**Next Steps:**
+1. Finish SIMD kernels and document floating tolerances (Milestone 6)
+2. Publish runnable examples and benchmark docs (Milestone 7)
+3. Prepare Python packaging/publishing workflow

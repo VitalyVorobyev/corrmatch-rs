@@ -16,6 +16,8 @@ image = { version = "0.25", optional = true, default-features = false, features 
 [dev-dependencies]
 rand = "0.9"
 criterion = "0.8"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 
 [features]
 default = []
@@ -24,4 +26,9 @@ simd = ["dep:wide"]
 image-io = ["dep:image"]
 
 [workspace]
-members = ["corrmatch-cli"]
+members = ["corrmatch-cli", "corrmatch-py"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
