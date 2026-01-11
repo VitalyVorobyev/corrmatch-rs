@@ -36,7 +36,8 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          args: --release -m corrmatch-py/Cargo.toml --out dist
+          args: --release -m corrmatch-py/Cargo.toml --out dist --interpreter python
+          python-version: ${{ matrix.python-version }}
 
       - name: Install wheel
         run: python -m pip install dist/*.whl
