@@ -3,6 +3,7 @@
 # Added by cargo
 
 /target
-/target
 **/*.rs.bk
 Cargo.lock
+
+synthetic_cases

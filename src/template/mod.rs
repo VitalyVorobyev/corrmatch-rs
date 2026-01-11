@@ -23,6 +23,16 @@ impl Template {
         Ok(Self { img })
     }
 
+    /// Returns the template width.
+    pub fn width(&self) -> usize {
+        self.img.width()
+    }
+
+    /// Returns the template height.
+    pub fn height(&self) -> usize {
+        self.img.height()
+    }
+
     /// Returns a borrowed view of the template data.
     pub fn view(&self) -> ImageView<'_, u8> {
         self.img.view()

@@ -1,0 +1,16 @@
+[package]
+name = "corrmatch-py"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for corrmatch template matching library"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+
+[lib]
+name = "corrmatch"
+crate-type = ["cdylib"]
+
+[dependencies]
+corrmatch = { path = "..", features = ["image-io", "rayon"] }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"

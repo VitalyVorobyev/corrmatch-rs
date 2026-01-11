@@ -24,4 +24,4 @@ simd = ["dep:wide"]
 image-io = ["dep:image"]
 
 [workspace]
-members = ["corrmatch-cli"]
+members = ["corrmatch-cli", "corrmatch-py"]

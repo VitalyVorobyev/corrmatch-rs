@@ -47,6 +47,33 @@ impl Default for CompileConfig {
     }
 }
 
+impl CompileConfig {
+    /// Validates the configuration, returning an error if any parameter is invalid.
+    pub fn validate(&self) -> CorrMatchResult<()> {
+        if self.max_levels == 0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "max_levels must be at least 1",
+            });
+        }
+        if !self.coarse_step_deg.is_finite() || self.coarse_step_deg <= 0.0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "coarse_step_deg must be a positive finite value",
+            });
+        }
+        if !self.min_step_deg.is_finite() || self.min_step_deg <= 0.0 {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "min_step_deg must be a positive finite value",
+            });
+        }
+        if self.min_step_deg > self.coarse_step_deg {
+            return Err(CorrMatchError::InvalidConfig {
+                reason: "min_step_deg must not exceed coarse_step_deg",
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for compiling template assets without rotation support.
 #[derive(Clone, Debug)]
 pub struct CompileConfigNoRot {

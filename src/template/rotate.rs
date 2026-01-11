@@ -30,6 +30,9 @@ pub fn rotate_u8_bilinear(src: ImageView<'_, u8>, angle_deg: f32, fill: u8) -> O
             let src_x = cos_a * dx + sin_a * dy + cx;
             let src_y = -sin_a * dx + cos_a * dy + cy;
 
+            // Skip pixels with out-of-bounds source coordinates.
+            // Use small epsilon tolerance to handle floating-point imprecision
+            // (e.g., 180 degree rotation can produce -1e-7 instead of 0.0).
             let epsilon = 1e-6;
             if !src_x.is_finite()
                 || !src_y.is_finite()
@@ -42,6 +45,8 @@ pub fn rotate_u8_bilinear(src: ImageView<'_, u8>, angle_deg: f32, fill: u8) -> O
                 continue;
             }
 
+            // Clamp to valid range before casting to usize.
+            // This handles the epsilon-tolerance edge cases safely.
             let src_x = src_x.clamp(0.0, max_x);
             let src_y = src_y.clamp(0.0, max_y);
             let x0 = src_x.floor() as usize;

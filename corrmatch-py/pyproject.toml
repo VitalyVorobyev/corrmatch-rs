@@ -1,0 +1,35 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "corrmatch"
+version = "0.1.0"
+description = "CPU-first template matching library for grayscale images"
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+keywords = ["template-matching", "image-processing", "computer-vision", "zncc", "ssd"]
+
+[project.urls]
+Homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+Repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+Documentation = "https://docs.rs/corrmatch"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "corrmatch._corrmatch"

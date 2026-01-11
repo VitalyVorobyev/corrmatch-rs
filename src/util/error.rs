@@ -54,4 +54,10 @@ pub enum CorrMatchError {
     /// Image I/O failed.
     #[error("image io error: {reason}")]
     ImageIo { reason: String },
+    /// Parallel execution requested but rayon feature is not enabled.
+    #[error("parallel execution requested but rayon feature is not enabled")]
+    ParallelUnavailable,
+    /// Invalid configuration parameter.
+    #[error("invalid config: {reason}")]
+    InvalidConfig { reason: &'static str },
 }

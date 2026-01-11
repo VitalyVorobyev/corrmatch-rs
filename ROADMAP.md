@@ -44,9 +44,40 @@ Acceptance: results match scalar within documented floating tolerance.
 Deliverables: runnable examples, image-io optional path, criterion benches.
 Acceptance: examples and benches are reproducible and documented.
 
+### 8. Python bindings via PyO3
+Deliverables: `corrmatch-py` crate, high-level Python API, maturin build.
+Acceptance: `import corrmatch` works with numpy arrays for image/template.
+
+### 9. Synthetic test validation
+Deliverables: ground-truth synthetic cases, Rust and Python validation suites.
+Acceptance: all generated cases pass within tolerance (position ±3px, angle ±2°).
+
+### 10. SSD metric support
+Deliverables: Sum of Squared Differences as alternative to ZNCC.
+Acceptance: SSD produces valid matches and passes synthetic tests.
+
 ## v1 scope
-- CPU-only template matching with ZNCC scoring.
+- CPU-only template matching with ZNCC and SSD scoring.
 - Coarse-to-fine pyramid search with hierarchical rotation refinement.
 - Top-K + NMS candidate pruning and quadratic final fits.
 - Optional rayon and SIMD acceleration behind feature flags.
+- Python bindings for numpy-based workflows.
 - Clear docs, examples, and benchmarks for typical template sizes.
+
+## Current status (2026-01)
+
+**Completed:**
+- Milestones 0-7 (core library, pyramids, refinement, rayon parallelism)
+- Milestone 10 (SSD metric)
+- CLI tool (corrmatch-cli)
+- Synthetic case generator (tools/synth_cases)
+- Code review and bug fixes (rotation bounds, config validation)
+
+**In Progress:**
+- Milestone 8 (Python bindings) - crate structure complete, needs maturin build
+- Milestone 9 (Synthetic validation) - Python tests written, Rust harness pending
+
+**Next Steps:**
+1. Build and test Python bindings with maturin
+2. Implement Rust-side synthetic case validation
+3. SIMD kernels (Milestone 6, partially complete)
