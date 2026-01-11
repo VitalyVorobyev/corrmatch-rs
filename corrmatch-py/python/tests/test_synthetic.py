@@ -7,11 +7,11 @@ import pytest
 
 from conftest import (
     ANGLE_TOLERANCE_DEG,
-    MIN_SCORE_THRESHOLD,
     POSITION_TOLERANCE_PX,
     SyntheticCase,
     assert_match_close,
     load_image,
+    min_score_threshold,
 )
 
 # Skip all tests if corrmatch is not available
@@ -33,19 +33,49 @@ class TestSyntheticCases:
         image = load_image(synthetic_case.image_path)
         template = load_image(synthetic_case.template_path)
 
-        # Load CLI config to determine rotation mode
+        # Load CLI config with full compile and match settings
         with open(synthetic_case.cli_config_path) as f:
             cli_config = json.load(f)
 
-        rotation = cli_config.get("match", {}).get("rotation", "disabled")
-        metric = cli_config.get("match", {}).get("metric", "zncc")
+        compile_cfg = cli_config.get("compile", {})
+        match_cfg = cli_config.get("match", {})
+
+        rotation = match_cfg.get("rotation", "disabled")
+        metric = match_cfg.get("metric", "zncc")
+
+        # Create template and compile with case-specific config
+        tpl = corrmatch.Template(template)
+
+        if rotation == "enabled":
+            compiled = tpl.compile(corrmatch.CompileConfig(
+                max_levels=compile_cfg.get("max_levels", 6),
+                coarse_step_deg=compile_cfg.get("coarse_step_deg", 10.0),
+                min_step_deg=compile_cfg.get("min_step_deg", 0.5),
+                fill_value=compile_cfg.get("fill_value", 0),
+                precompute_coarsest=compile_cfg.get("precompute_coarsest", True),
+            ))
+        else:
+            compiled = tpl.compile_no_rotation(
+                max_levels=compile_cfg.get("max_levels", 6)
+            )
+
+        # Create matcher with case-specific config
+        matcher = compiled.matcher(corrmatch.MatchConfig(
+            metric=metric,
+            rotation=rotation,
+            parallel=match_cfg.get("parallel", False),
+            max_image_levels=match_cfg.get("max_image_levels", 6),
+            beam_width=match_cfg.get("beam_width", 8),
+            per_angle_topk=match_cfg.get("per_angle_topk", 3),
+            nms_radius=match_cfg.get("nms_radius", 6),
+            roi_radius=match_cfg.get("roi_radius", 8),
+            angle_half_range_steps=match_cfg.get("angle_half_range_steps", 1),
+            min_var_i=match_cfg.get("min_var_i", 1e-8),
+            min_score=match_cfg.get("min_score", float("-inf")),
+        ))
 
         # Run matcher
-        result = corrmatch.match_template(
-            image, template,
-            rotation=rotation,
-            metric=metric,
-        )
+        result = matcher.match_image(image)
 
         # Get primary expected instance
         expected = synthetic_case.instances[0]
@@ -55,8 +85,9 @@ class TestSyntheticCases:
 
         # Check score is reasonable
         if metric == "zncc":
-            assert result.score >= MIN_SCORE_THRESHOLD, \
-                f"Score {result.score:.4f} below threshold {MIN_SCORE_THRESHOLD}"
+            threshold = min_score_threshold(synthetic_case.case_id)
+            assert result.score >= threshold, \
+                f"Score {result.score:.4f} below threshold {threshold}"
 
     def test_match_absent(self, synthetic_case: SyntheticCase):
         """Test that matcher doesn't find template when absent."""
@@ -71,7 +102,8 @@ class TestSyntheticCases:
 
         # Score should be low for absent template
         # (This is a weak check - we mainly verify it doesn't crash)
-        assert result.score < MIN_SCORE_THRESHOLD, \
+        threshold = min_score_threshold(synthetic_case.case_id)
+        assert result.score < threshold, \
             f"Unexpectedly high score {result.score:.4f} for absent template"
 
 
@@ -175,11 +207,24 @@ class TestRotation:
         x, y = 32, 32
         image[y:y+32, x:x+32] = template_rot
 
-        # Match with rotation enabled
-        result = corrmatch.match_template(
-            image, template,
+        tpl = corrmatch.Template(template)
+        compiled = tpl.compile(corrmatch.CompileConfig(
+            max_levels=1,
+            coarse_step_deg=90.0,
+            min_step_deg=90.0,
+            fill_value=0,
+            precompute_coarsest=True,
+        ))
+        matcher = compiled.matcher(corrmatch.MatchConfig(
             rotation="enabled",
-        )
+            max_image_levels=1,
+            beam_width=6,
+            per_angle_topk=3,
+            nms_radius=4,
+            roi_radius=6,
+            angle_half_range_steps=1,
+        ))
+        result = matcher.match_image(image)
 
         # Should find template near correct position
         assert abs(result.x - x) <= 4.0

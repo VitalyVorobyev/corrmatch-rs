@@ -254,6 +254,40 @@ def pattern_noise(width: int, height: int, rng: random.Random) -> List[int]:
     return [rng.randint(0, 255) for _ in range(width * height)]
 
 
+def pattern_asymmetric(width: int, height: int, rng: random.Random) -> List[int]:
+    """
+    Generate an asymmetric pattern (L-shape + diagonal gradient) that has no
+    rotational symmetry, ideal for testing fine rotation detection.
+    """
+    out = [80] * (width * height)
+
+    # Horizontal bar in upper quarter
+    bar_h = height // 4
+    for y in range(bar_h):
+        for x in range(width):
+            out[y * width + x] = 200
+
+    # Vertical bar on left quarter (creates L-shape)
+    bar_w = width // 4
+    for y in range(height):
+        for x in range(bar_w):
+            out[y * width + x] = 200
+
+    # Diagonal gradient in lower-right quadrant (breaks all symmetry)
+    for y in range(height // 2, height):
+        for x in range(width // 2, width):
+            t = (x - width // 2) / max(1, width // 2)
+            value = int(40 + 180 * t)
+            out[y * width + x] = clamp_u8(value)
+
+    # Add some texture/noise
+    for i in range(len(out)):
+        jitter = rng.randint(-15, 15)
+        out[i] = clamp_u8(out[i] + jitter)
+
+    return out
+
+
 def make_pattern(
     name: str, width: int, height: int, rng: random.Random
 ) -> List[int]:
@@ -270,6 +304,8 @@ def make_pattern(
     if name == "noise":
         data = pattern_noise(width, height, rng)
         return gaussian_blur_u8(data, width, height, 0.6)
+    if name == "asymmetric":
+        return pattern_asymmetric(width, height, rng)
     raise ValueError(f"unknown pattern '{name}'")
 
 
@@ -633,7 +669,7 @@ def base_cases_standard() -> List[CaseSpec]:
             family="rotation",
             image_size=(320, 240),
             template_size=(80, 60),
-            template_pattern="rings",
+            template_pattern="asymmetric",  # Changed from rings to avoid 180° symmetry
             background_style="gradient",
             rotation_deg=22.5,
             match_overrides={"rotation": "enabled", "max_image_levels": 4},
@@ -742,6 +778,30 @@ def base_cases_standard() -> List[CaseSpec]:
             noise_sigma=3.0,
             match_overrides={"rotation": "disabled", "max_image_levels": 6},
             compile_overrides={"max_levels": 6},
+        ),
+        # Single-level test cases (no pyramid) to isolate correlation from pyramid issues
+        CaseSpec(
+            case_id="pyramid_stress_single_level",
+            family="pyramid",
+            image_size=(1200, 900),
+            template_size=(160, 120),
+            template_pattern="checker",
+            background_style="xor",
+            rotation_deg=0.0,
+            noise_sigma=3.0,
+            match_overrides={"rotation": "disabled", "max_image_levels": 1},
+            compile_overrides={"max_levels": 1},
+        ),
+        CaseSpec(
+            case_id="rotation_fine_single_level",
+            family="rotation",
+            image_size=(320, 240),
+            template_size=(80, 60),
+            template_pattern="asymmetric",
+            background_style="gradient",
+            rotation_deg=22.5,
+            match_overrides={"rotation": "enabled", "max_image_levels": 1},
+            compile_overrides={"max_levels": 1, "coarse_step_deg": 5.0, "min_step_deg": 1.0},
         ),
     ]
 

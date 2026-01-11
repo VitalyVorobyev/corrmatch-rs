@@ -215,6 +215,8 @@ dependencies = [
  "image",
  "rand",
  "rayon",
+ "serde",
+ "serde_json",
  "thiserror",
  "wide",
 ]

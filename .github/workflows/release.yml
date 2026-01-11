@@ -37,17 +37,17 @@ jobs:
 
       - name: Package crates
         run: |
-          cargo package -p genicp --locked
-          cargo package -p genapi-xml --locked
+          cargo package -p corrmatch --locked
+          cargo package -p corrmatch-cli --locked
 
       - name: Build release binaries
-        run: cargo build --release --locked --bin genicam-rs
+        run: cargo build --release --locked -p corrmatch-cli
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          BIN_NAME="genicam-rs-${{ github.ref_name }}"
-          cp target/release/genicam-rs "dist/${BIN_NAME}"
+          BIN_NAME="corrmatch-cli-${{ github.ref_name }}"
+          cp target/release/corrmatch-cli "dist/${BIN_NAME}"
           tar -czf "dist/${BIN_NAME}-x86_64-unknown-linux-gnu.tar.gz" -C dist "${BIN_NAME}"
           rm "dist/${BIN_NAME}"
           cp target/package/*.crate dist/
