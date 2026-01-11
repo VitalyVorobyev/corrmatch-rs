@@ -67,17 +67,19 @@ Acceptance: SSD produces valid matches and passes synthetic tests.
 ## Current status (2026-01)
 
 **Completed:**
-- Milestones 0-7 (core library, pyramids, refinement, rayon parallelism)
+- Milestones 0-6 (core library, pyramids, refinement, deterministic rayon)
+- Milestone 8 (Python bindings via PyO3 + maturin)
+- Milestone 9 (synthetic validation in Rust + Python)
 - Milestone 10 (SSD metric)
 - CLI tool (corrmatch-cli)
 - Synthetic case generator (tools/synth_cases)
 - Code review and bug fixes (rotation bounds, config validation)
 
 **In Progress:**
-- Milestone 8 (Python bindings) - crate structure complete, needs maturin build
-- Milestone 9 (Synthetic validation) - Python tests written, Rust harness pending
+- Milestone 7 (docs/examples/benches) - expand examples and document benchmark usage
+- Milestone 6 SIMD kernels (partial) - validate parity and tolerances
 
 **Next Steps:**
-1. Build and test Python bindings with maturin
-2. Implement Rust-side synthetic case validation
-3. SIMD kernels (Milestone 6, partially complete)
+1. Finish SIMD kernels and document floating tolerances (Milestone 6)
+2. Publish runnable examples and benchmark docs (Milestone 7)
+3. Prepare Python packaging/publishing workflow

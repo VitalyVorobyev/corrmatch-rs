@@ -1,5 +1,7 @@
 # corrmatch
 [![CI](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/ci.yml)
+[![Python Tests](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/test_py.yml/badge.svg?branch=main)](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/test_py.yml)
+[![Security Audit](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/audit.yml/badge.svg?branch=main)](https://github.com/VitalyVorobyev/corrmatch-rs/actions/workflows/audit.yml)
 [![crates.io](https://img.shields.io/crates/v/corrmatch.svg)](https://crates.io/crates/corrmatch)
 [![docs.rs](https://img.shields.io/docsrs/corrmatch)](https://docs.rs/corrmatch)
 [![license](https://img.shields.io/crates/l/corrmatch.svg)](LICENSE)
@@ -8,6 +10,12 @@ CorrMatch is a CPU-first template matching library for grayscale images. It
 implements a coarse-to-fine pyramid search with optional rotation and two
 metrics: ZNCC and SSD. The focus is deterministic, reproducible matching with
 minimal dependencies.
+
+## Install
+```toml
+[dependencies]
+corrmatch = "0.1"
+```
 
 ## Quickstart (library)
 ```rust
@@ -83,6 +91,12 @@ at `corrmatch-cli/config.example.json`.
 - `simd`: SIMD-accelerated kernels (planned).
 - `image-io`: file I/O helpers via the `image` crate.
 
+## Python bindings (corrmatch-py)
+The workspace includes PyO3 bindings in `corrmatch-py`.
+
+- Build locally: `cd corrmatch-py && maturin develop --release`
+- Run tests: `python -m pytest python/tests`
+
 ## Low-level API
 Advanced hooks live in `corrmatch::lowlevel`, including template plans, kernel
 traits, scan helpers, and rotation utilities. These are intended for custom
@@ -103,6 +117,5 @@ let template = load_gray_image("template.png")?;
 - `cargo bench`
 
 ## Status
-Core data types, compiled template assets, a coarse-to-fine matcher, and
-subpixel/subangle refinement are implemented. Next up: reference test cases,
-performance baselines, and Python bindings via PyO3.
+Core matcher types, the JSON-driven CLI, and Python bindings are implemented.
+See `ROADMAP.md` for upcoming milestones.
