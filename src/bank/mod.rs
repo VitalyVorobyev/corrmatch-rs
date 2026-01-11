@@ -20,6 +20,37 @@ use crate::template::{
 use crate::util::{CorrMatchError, CorrMatchResult};
 use std::sync::{Arc, OnceLock};
 
+fn trim_degenerate_levels(levels: &mut Vec<OwnedImage>, min_dim: usize) -> CorrMatchResult<()> {
+    let mut last_err: Option<CorrMatchError> = None;
+    loop {
+        let level = match levels.last() {
+            Some(level) => level,
+            None => {
+                return Err(last_err.unwrap_or(CorrMatchError::DegenerateTemplate {
+                    reason: "zero variance",
+                }));
+            }
+        };
+
+        if level.width() < min_dim || level.height() < min_dim {
+            levels.pop();
+            last_err = Some(CorrMatchError::DegenerateTemplate {
+                reason: "template too small for rotation",
+            });
+            continue;
+        }
+
+        match TemplatePlan::from_view(level.view()) {
+            Ok(_) => return Ok(()),
+            Err(err @ CorrMatchError::DegenerateTemplate { .. }) => {
+                levels.pop();
+                last_err = Some(err);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
 /// Configuration for compiling template assets with rotation support.
 #[derive(Clone, Debug)]
 pub struct CompileConfig {
@@ -121,7 +152,8 @@ impl CompiledTemplateRot {
     /// Compiles template assets for matching with rotation support.
     pub fn compile(tpl: &Template, cfg: CompileConfig) -> CorrMatchResult<Self> {
         let pyramid = ImagePyramid::build_u8(tpl.view(), cfg.max_levels)?;
-        let levels = pyramid.into_levels();
+        let mut levels = pyramid.into_levels();
+        trim_degenerate_levels(&mut levels, 3)?;
 
         let mut unmasked_zncc = Vec::with_capacity(levels.len());
         let mut unmasked_ssd = Vec::with_capacity(levels.len());
@@ -283,7 +315,8 @@ impl CompiledTemplateNoRot {
     /// Compiles template assets without rotation support.
     pub fn compile(tpl: &Template, cfg: CompileConfigNoRot) -> CorrMatchResult<Self> {
         let pyramid = ImagePyramid::build_u8(tpl.view(), cfg.max_levels)?;
-        let levels = pyramid.into_levels();
+        let mut levels = pyramid.into_levels();
+        trim_degenerate_levels(&mut levels, 1)?;
 
         let mut unmasked_zncc = Vec::with_capacity(levels.len());
         let mut unmasked_ssd = Vec::with_capacity(levels.len());

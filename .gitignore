@@ -7,3 +7,5 @@
 Cargo.lock
 
 synthetic_cases
+*.pyc
+__pycache__/

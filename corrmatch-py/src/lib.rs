@@ -8,9 +8,9 @@ use pyo3::prelude::*;
 
 use corrmatch::{
     CompileConfig as RustCompileConfig, CompileConfigNoRot as RustCompileConfigNoRot,
-    CompiledTemplate as RustCompiledTemplate, CorrMatchError, ImageView,
-    Match as RustMatch, MatchConfig as RustMatchConfig, Matcher as RustMatcher,
-    Metric as RustMetric, RotationMode as RustRotationMode, Template as RustTemplate,
+    CompiledTemplate as RustCompiledTemplate, CorrMatchError, ImageView, Match as RustMatch,
+    MatchConfig as RustMatchConfig, Matcher as RustMatcher, Metric as RustMetric,
+    RotationMode as RustRotationMode, Template as RustTemplate,
 };
 
 /// Convert a CorrMatchError to a Python exception.
@@ -82,16 +82,16 @@ impl CompileConfig {
         min_step_deg: f32,
         fill_value: u8,
         precompute_coarsest: bool,
-    ) -> Self {
-        Self {
-            inner: RustCompileConfig {
-                max_levels,
-                coarse_step_deg,
-                min_step_deg,
-                fill_value,
-                precompute_coarsest,
-            },
-        }
+    ) -> PyResult<Self> {
+        let inner = RustCompileConfig {
+            max_levels,
+            coarse_step_deg,
+            min_step_deg,
+            fill_value,
+            precompute_coarsest,
+        };
+        inner.validate().map_err(to_py_err)?;
+        Ok(Self { inner })
     }
 
     /// Validate the configuration.
@@ -176,21 +176,21 @@ impl MatchConfig {
                 ))
             }
         };
-        Ok(Self {
-            inner: RustMatchConfig {
-                metric,
-                rotation,
-                parallel,
-                max_image_levels,
-                beam_width,
-                per_angle_topk,
-                nms_radius,
-                roi_radius,
-                angle_half_range_steps,
-                min_var_i,
-                min_score,
-            },
-        })
+        let inner = RustMatchConfig {
+            metric,
+            rotation,
+            parallel,
+            max_image_levels,
+            beam_width,
+            per_angle_topk,
+            nms_radius,
+            roi_radius,
+            angle_half_range_steps,
+            min_var_i,
+            min_score,
+        };
+        inner.validate().map_err(to_py_err)?;
+        Ok(Self { inner })
     }
 
     /// Validate the configuration.
@@ -246,9 +246,8 @@ impl Template {
     #[staticmethod]
     fn from_file(path: &str) -> PyResult<Self> {
         let owned = corrmatch::io::load_gray_image(path).map_err(to_py_err)?;
-        let inner =
-            RustTemplate::new(owned.data().to_vec(), owned.width(), owned.height())
-                .map_err(to_py_err)?;
+        let inner = RustTemplate::new(owned.data().to_vec(), owned.width(), owned.height())
+            .map_err(to_py_err)?;
         Ok(Self { inner })
     }
 
@@ -260,7 +259,8 @@ impl Template {
     fn compile(&self, config: Option<CompileConfig>) -> PyResult<CompiledTemplate> {
         let cfg = config.map(|c| c.inner).unwrap_or_default();
         cfg.validate().map_err(to_py_err)?;
-        let compiled = RustCompiledTemplate::compile_rotated(&self.inner, cfg).map_err(to_py_err)?;
+        let compiled =
+            RustCompiledTemplate::compile_rotated(&self.inner, cfg).map_err(to_py_err)?;
         let num_levels = compiled.num_levels();
         let matcher = RustMatcher::new(compiled);
         Ok(CompiledTemplate::new_with_matcher(matcher, num_levels))
@@ -335,9 +335,7 @@ impl CompiledTemplate {
     #[pyo3(signature = (config = None))]
     fn matcher(&mut self, config: Option<MatchConfig>) -> PyResult<Matcher> {
         let inner = self.matcher.take().ok_or_else(|| {
-            PyRuntimeError::new_err(
-                "CompiledTemplate already consumed - recompile the template",
-            )
+            PyRuntimeError::new_err("CompiledTemplate already consumed - recompile the template")
         })?;
 
         let cfg = config.map(|c| c.inner).unwrap_or_default();

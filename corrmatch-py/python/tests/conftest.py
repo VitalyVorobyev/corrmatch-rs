@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import List
 
 import numpy as np
 import pytest
@@ -70,6 +70,7 @@ def load_case(case_dir: Path) -> SyntheticCase:
 def discover_cases() -> List[SyntheticCase]:
     """Discover all synthetic test cases."""
     if not SYNTHETIC_CASES_DIR.exists():
+        print(f"Warning: Synthetic cases directory does not exist: {SYNTHETIC_CASES_DIR}")
         return []
 
     cases = []

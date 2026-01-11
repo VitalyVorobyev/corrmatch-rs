@@ -25,3 +25,8 @@ image-io = ["dep:image"]
 
 [workspace]
 members = ["corrmatch-cli", "corrmatch-py"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
