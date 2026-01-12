@@ -7,6 +7,7 @@ use corrmatch::{
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::EnvFilter;
 
 const SCHEMA_JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/config.schema.json"));
@@ -177,6 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env().add_directive("corrmatch=info".parse()?))
             .with_target(false)
+            .with_span_events(FmtSpan::CLOSE)
             .init();
     }
 
