@@ -1,10 +1,10 @@
 {
-  "image_path": "image.png",
-  "template_path": "template.png",
-  "output_path": "result.json",
-  "topk": 5,
+  "image_path": "synthetic_cases/blur_sigma_1_5/image.png",
+  "template_path": "synthetic_cases/blur_sigma_1_5/template.png",
+  "output_path": "blur_sigma_result.json",
+  "topk": 1,
   "compile": {
-    "max_levels": 5,
+    "max_levels": 3,
     "coarse_step_deg": 30.0,
     "min_step_deg": 7.5,
     "fill_value": 0,
@@ -12,7 +12,7 @@
   },
   "match": {
     "metric": "zncc",
-    "rotation": "enabled",
+    "rotation": "disabled",
     "parallel": false,
     "max_image_levels": 5,
     "beam_width": 8,
@@ -21,6 +21,6 @@
     "roi_radius": 8,
     "angle_half_range_steps": 1,
     "min_var_i": 1e-8,
-    "min_score": -1.0e9
+    "min_score": 0.65
   }
 }

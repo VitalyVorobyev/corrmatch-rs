@@ -6,6 +6,7 @@
 use crate::bank::CompiledTemplate;
 use crate::candidate::nms::nms_2d;
 use crate::candidate::topk::Peak;
+use crate::image::integral::IntegralImages;
 use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
 use crate::kernel::{Kernel, ScanParams};
 use crate::refine::quad1d::quad_peak_offset_1d;
@@ -263,6 +264,85 @@ pub(crate) fn refine_to_finer_level_unmasked(
                 all_peaks.extend(peaks);
             }
         }
+    }
+
+    if all_peaks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut kept = nms_2d(&mut all_peaks, cfg.nms_radius);
+    if kept.len() > cfg.beam_width {
+        kept.truncate(cfg.beam_width);
+    }
+
+    let mut out = Vec::with_capacity(kept.len());
+    for peak in kept.drain(..) {
+        out.push(Candidate::from_peak(finer_level, 0.0, peak));
+    }
+
+    trace_event!("refined_candidates", count = out.len());
+    Ok(out)
+}
+
+/// Refines candidates without rotation using integral-image variance pruning.
+pub(crate) fn refine_to_finer_level_unmasked_zncc_integral(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    finer_level: usize,
+    prev: &[Candidate],
+    cfg: &MatchConfig,
+    integrals: &IntegralImages,
+) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("refine_level", level = finer_level, candidates = prev.len()).entered();
+
+    if prev.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    debug_assert!(matches!(cfg.metric, Metric::Zncc));
+    let (tpl_width, tpl_height) =
+        compiled
+            .level_size(finer_level)
+            .ok_or(CorrMatchError::IndexOutOfBounds {
+                index: finer_level,
+                len: compiled.num_levels(),
+                context: "level",
+            })?;
+
+    let img_width = image.width();
+    let img_height = image.height();
+    if img_width < tpl_width || img_height < tpl_height {
+        return Err(CorrMatchError::RoiOutOfBounds {
+            x: 0,
+            y: 0,
+            width: tpl_width,
+            height: tpl_height,
+            img_width,
+            img_height,
+        });
+    }
+
+    let max_x = img_width - tpl_width;
+    let max_y = img_height - tpl_height;
+    let params = ScanParams {
+        topk: cfg.per_angle_topk,
+        min_var_i: cfg.min_var_i,
+        min_score: cfg.min_score,
+    };
+    let mut all_peaks = Vec::new();
+
+    let plan = compiled.unmasked_zncc_plan(finer_level)?;
+    for cand in prev.iter().copied() {
+        debug_assert!(cand.level > finer_level);
+        let (x_up, y_up) = upscale_pos(cand.x, cand.y);
+        let roi = match roi_bounds(x_up, y_up, cfg.roi_radius, max_x, max_y) {
+            Some(bounds) => bounds,
+            None => continue,
+        };
+        let peaks = ZnccUnmasked::scan_roi_integral(
+            image, plan, 0, roi.0, roi.1, roi.2, roi.3, params, integrals,
+        )?;
+        all_peaks.extend(peaks);
     }
 
     if all_peaks.is_empty() {

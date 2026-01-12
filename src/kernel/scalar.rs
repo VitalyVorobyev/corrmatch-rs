@@ -1,6 +1,7 @@
 //! Scalar reference kernels for score evaluation.
 
 use crate::candidate::topk::{Peak, TopK};
+use crate::image::integral::IntegralImages;
 use crate::kernel::{Kernel, ScanParams};
 use crate::template::{MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, TemplatePlan};
 use crate::util::{CorrMatchError, CorrMatchResult};
@@ -479,6 +480,149 @@ impl ZnccUnmaskedScalar {
 
         Ok(topk_buf.into_sorted_desc())
     }
+
+    #[cfg_attr(feature = "simd", allow(dead_code))]
+    #[inline]
+    fn dot_at(
+        image: ImageView<'_, u8>,
+        t_prime: &[f32],
+        tpl_width: usize,
+        tpl_height: usize,
+        x: usize,
+        y: usize,
+    ) -> f32 {
+        let mut dot = 0.0f32;
+        for ty in 0..tpl_height {
+            let img_row = image.row(y + ty).expect("row within bounds for scan");
+            let base = ty * tpl_width;
+            for tx in 0..tpl_width {
+                let idx = base + tx;
+                let value = img_row[x + tx] as f32;
+                dot += t_prime[idx] * value;
+            }
+        }
+        dot
+    }
+
+    #[cfg_attr(feature = "simd", allow(dead_code))]
+    #[allow(clippy::too_many_arguments)]
+    fn scan_range_integral(
+        image: ImageView<'_, u8>,
+        tpl: &TemplatePlan,
+        angle_idx: usize,
+        x0: usize,
+        y0: usize,
+        mut x1: usize,
+        mut y1: usize,
+        params: ScanParams,
+        integrals: &IntegralImages,
+    ) -> CorrMatchResult<Vec<Peak>> {
+        if params.topk == 0 {
+            return Ok(Vec::new());
+        }
+
+        let img_width = image.width();
+        let img_height = image.height();
+        let tpl_width = tpl.width();
+        let tpl_height = tpl.height();
+
+        if img_width < tpl_width || img_height < tpl_height {
+            return Err(CorrMatchError::RoiOutOfBounds {
+                x: 0,
+                y: 0,
+                width: tpl_width,
+                height: tpl_height,
+                img_width,
+                img_height,
+            });
+        }
+
+        debug_assert_eq!(integrals.width(), img_width);
+        debug_assert_eq!(integrals.height(), img_height);
+
+        let max_x = img_width - tpl_width;
+        let max_y = img_height - tpl_height;
+        if x0 > max_x || y0 > max_y {
+            return Ok(Vec::new());
+        }
+        x1 = x1.min(max_x);
+        y1 = y1.min(max_y);
+        if x0 > x1 || y0 > y1 {
+            return Ok(Vec::new());
+        }
+
+        let var_t = tpl.var_t();
+        if var_t <= 1e-8 {
+            return Ok(Vec::new());
+        }
+        let t_prime = tpl.t_prime();
+        let n = (tpl_width * tpl_height) as f32;
+
+        let mut topk_buf = TopK::new(params.topk);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let sum_i = integrals.sum_rect(x, y, tpl_width, tpl_height);
+                let sum_i2 = integrals.sumsq_rect(x, y, tpl_width, tpl_height);
+                let var_i = sum_i2 - (sum_i * sum_i) / n;
+                if var_i <= params.min_var_i {
+                    continue;
+                }
+
+                let dot = Self::dot_at(image, t_prime, tpl_width, tpl_height, x, y);
+                let denom = (var_t * var_i).sqrt();
+                let score = dot / denom;
+                if score.is_finite() && score >= params.min_score {
+                    topk_buf.push(Peak {
+                        x,
+                        y,
+                        score,
+                        angle_idx,
+                    });
+                }
+            }
+        }
+
+        Ok(topk_buf.into_sorted_desc())
+    }
+
+    /// Scans the full valid placement range using integral-image variance pruning.
+    #[cfg_attr(feature = "simd", allow(dead_code))]
+    pub(crate) fn scan_full_integral(
+        image: ImageView<'_, u8>,
+        tpl: &TemplatePlan,
+        angle_idx: usize,
+        params: ScanParams,
+        integrals: &IntegralImages,
+    ) -> CorrMatchResult<Vec<Peak>> {
+        Self::scan_range_integral(
+            image,
+            tpl,
+            angle_idx,
+            0,
+            0,
+            usize::MAX,
+            usize::MAX,
+            params,
+            integrals,
+        )
+    }
+
+    /// Scans an ROI using integral-image variance pruning.
+    #[cfg_attr(feature = "simd", allow(dead_code))]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn scan_roi_integral(
+        image: ImageView<'_, u8>,
+        tpl: &TemplatePlan,
+        angle_idx: usize,
+        x0: usize,
+        y0: usize,
+        x1: usize,
+        y1: usize,
+        params: ScanParams,
+        integrals: &IntegralImages,
+    ) -> CorrMatchResult<Vec<Peak>> {
+        Self::scan_range_integral(image, tpl, angle_idx, x0, y0, x1, y1, params, integrals)
+    }
 }
 
 impl Kernel for ZnccUnmaskedScalar {
@@ -739,9 +883,11 @@ impl SsdUnmaskedScalar {
 #[cfg(test)]
 mod tests {
     use super::{Kernel, SsdMaskedScalar, SsdUnmaskedScalar, ZnccUnmaskedScalar};
+    use crate::image::integral::IntegralImages;
     use crate::kernel::ScanParams;
     use crate::template::{MaskedSsdTemplatePlan, SsdTemplatePlan, TemplatePlan};
     use crate::ImageView;
+    use std::collections::HashMap;
 
     #[test]
     fn unmasked_zncc_scan_matches_bruteforce() {
@@ -814,6 +960,53 @@ mod tests {
         assert_eq!(best.x, best_x);
         assert_eq!(best.y, best_y);
         assert!((best.score - best_score as f32).abs() < 1e-5);
+    }
+
+    #[test]
+    fn unmasked_zncc_integral_scan_matches_scalar() {
+        let img_width = 6;
+        let img_height = 5;
+        let mut image = Vec::with_capacity(img_width * img_height);
+        for y in 0..img_height {
+            for x in 0..img_width {
+                image.push(((x * 17 + y * 9 + x * y + 3) & 0xFF) as u8);
+            }
+        }
+        let tpl_width = 3;
+        let tpl_height = 2;
+        let mut tpl = Vec::with_capacity(tpl_width * tpl_height);
+        for y in 0..tpl_height {
+            for x in 0..tpl_width {
+                tpl.push(((x * 5 + y * 11 + x * y + 1) & 0xFF) as u8);
+            }
+        }
+
+        let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+        let tpl_view = ImageView::from_slice(&tpl, tpl_width, tpl_height).unwrap();
+        let plan = TemplatePlan::from_view(tpl_view).unwrap();
+        let placements = (img_width - tpl_width + 1) * (img_height - tpl_height + 1);
+        let params = ScanParams {
+            topk: placements,
+            min_var_i: 1e-8,
+            min_score: f32::NEG_INFINITY,
+        };
+
+        let scalar =
+            <ZnccUnmaskedScalar as Kernel>::scan_full(image_view, &plan, 0, params).unwrap();
+        let integrals = IntegralImages::from_u8(image_view).unwrap();
+        let integral =
+            ZnccUnmaskedScalar::scan_full_integral(image_view, &plan, 0, params, &integrals)
+                .unwrap();
+
+        assert_eq!(scalar.len(), integral.len());
+        let mut scores = HashMap::with_capacity(scalar.len());
+        for peak in scalar {
+            scores.insert((peak.x, peak.y), peak.score);
+        }
+        for peak in integral {
+            let score = scores.get(&(peak.x, peak.y)).unwrap();
+            assert!((peak.score - score).abs() < 1e-5);
+        }
     }
 
     #[test]

@@ -7,13 +7,16 @@ mod refine;
 pub(crate) mod scan;
 
 use crate::bank::CompiledTemplate;
+use crate::image::integral::IntegralImages;
 use crate::image::pyramid::ImagePyramid;
-use crate::search::coarse::{coarse_search_level, coarse_search_level_unmasked};
+use crate::search::coarse::{
+    coarse_search_level, coarse_search_level_unmasked, coarse_search_level_unmasked_zncc_integral,
+};
 #[cfg(feature = "rayon")]
 use crate::search::coarse::{coarse_search_level_par, coarse_search_level_unmasked_par};
 use crate::search::refine::{
     refine_final_match, refine_final_match_unmasked, refine_to_finer_level,
-    refine_to_finer_level_unmasked, Candidate,
+    refine_to_finer_level_unmasked, refine_to_finer_level_unmasked_zncc_integral, Candidate,
 };
 #[cfg(feature = "rayon")]
 use crate::search::refine::{refine_to_finer_level_par, refine_to_finer_level_unmasked_par};
@@ -267,6 +270,26 @@ impl Matcher {
             });
         }
 
+        let use_integral = !use_parallel
+            && self.cfg.rotation == RotationMode::Disabled
+            && self.cfg.metric == Metric::Zncc;
+        let integrals = if use_integral {
+            let mut out = Vec::with_capacity(num_levels);
+            for level in 0..num_levels {
+                let view = pyramid
+                    .level(level)
+                    .ok_or(CorrMatchError::IndexOutOfBounds {
+                        index: level,
+                        len: pyramid.levels().len(),
+                        context: "image level",
+                    })?;
+                out.push(IntegralImages::from_u8(view)?);
+            }
+            Some(out)
+        } else {
+            None
+        };
+
         let coarsest = num_levels - 1;
         let coarse_view = pyramid
             .level(coarsest)
@@ -310,6 +333,17 @@ impl Matcher {
                             &self.cfg,
                         )?
                     }
+                } else if use_integral {
+                    let integrals = integrals
+                        .as_ref()
+                        .expect("integrals built for unmasked ZNCC");
+                    coarse_search_level_unmasked_zncc_integral(
+                        coarse_view,
+                        &self.compiled,
+                        coarsest,
+                        &self.cfg,
+                        &integrals[coarsest],
+                    )?
                 } else {
                     coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, &self.cfg)?
                 }
@@ -378,6 +412,18 @@ impl Matcher {
                                 &self.cfg,
                             )?
                         }
+                    } else if use_integral {
+                        let integrals = integrals
+                            .as_ref()
+                            .expect("integrals built for unmasked ZNCC");
+                        refine_to_finer_level_unmasked_zncc_integral(
+                            level_view,
+                            &self.compiled,
+                            level,
+                            &seeds,
+                            &self.cfg,
+                            &integrals[level],
+                        )?
                     } else {
                         refine_to_finer_level_unmasked(
                             level_view,
