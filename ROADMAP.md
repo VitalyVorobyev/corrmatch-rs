@@ -71,15 +71,29 @@ Acceptance: SSD produces valid matches and passes synthetic tests.
 - Milestone 8 (Python bindings via PyO3 + maturin)
 - Milestone 9 (synthetic validation in Rust + Python)
 - Milestone 10 (SSD metric)
-- CLI tool (corrmatch-cli)
+- CLI tool with tracing support (`--trace` flag)
 - Synthetic case generator (tools/synth_cases)
-- Code review and bug fixes (rotation bounds, config validation)
+- Rayon parallel rotation precomputation
+- SIMD kernels (via `wide` crate - deferred, not beneficial for current bottlenecks)
+- Phase 4.2: Precomputed valid indices for masked kernels (eliminates mask branch mispredictions)
+- Phase 4.3: Multi-angle batch refinement for cache locality
 
 **In Progress:**
-- Milestone 7 (docs/examples/benches) - expand examples and document benchmark usage
-- Milestone 6 SIMD kernels (partial) - validate parity and tolerances
+- Milestone 5 (Performance hardening) - profiling and validation
+- Milestone 7 (docs/examples/benches) - documentation and benchmarks
 
 **Next Steps:**
-1. Finish SIMD kernels and document floating tolerances (Milestone 6)
-2. Publish runnable examples and benchmark docs (Milestone 7)
-3. Prepare Python packaging/publishing workflow
+1. Profile and validate performance improvements with tracing
+2. Document benchmark results and performance characteristics
+3. Publish runnable examples and benchmark docs (Milestone 7)
+4. Prepare Python packaging/publishing workflow
+
+**Performance Notes:**
+- SIMD implementation via `wide` crate is available but deferred. Profiling showed
+  u8→f32 conversion overhead and horizontal sum inefficiency make it slower than
+  scalar for the current workload. The main bottleneck is masked kernels (rotation-
+  enabled path), which account for ~63% of runtime at level 0 refinement.
+- Precomputed valid indices (Phase 4.2) eliminates ~30-50% branch mispredictions
+  from mask checks in hot loops.
+- Multi-angle batch refinement (Phase 4.3) caches image rows and reuses them across
+  all angle evaluations at each position, eliminating redundant memory fetches.

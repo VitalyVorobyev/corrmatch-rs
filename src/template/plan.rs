@@ -183,6 +183,10 @@ pub struct MaskedTemplatePlan {
     t_prime: Vec<f32>,
     mask: Arc<[u8]>,
     angle_deg: f32,
+    /// Precomputed indices where mask is non-zero (for branch-free iteration).
+    valid_indices: Vec<u16>,
+    /// Precomputed t_prime values at valid indices only.
+    valid_t_prime: Vec<f32>,
 }
 
 impl MaskedTemplatePlan {
@@ -272,6 +276,18 @@ impl MaskedTemplatePlan {
             });
         }
 
+        // Precompute valid indices for branch-free iteration in hot loops.
+        // This eliminates mask branch mispredictions during score computation.
+        let valid_count = sum_w as usize;
+        let mut valid_indices = Vec::with_capacity(valid_count);
+        let mut valid_t_prime = Vec::with_capacity(valid_count);
+        for (idx, (&m, &tp)) in mask.iter().zip(t_prime.iter()).enumerate() {
+            if m != 0 {
+                valid_indices.push(idx as u16);
+                valid_t_prime.push(tp);
+            }
+        }
+
         Ok(Self {
             width,
             height,
@@ -280,6 +296,8 @@ impl MaskedTemplatePlan {
             t_prime,
             mask,
             angle_deg,
+            valid_indices,
+            valid_t_prime,
         })
     }
 
@@ -317,6 +335,20 @@ impl MaskedTemplatePlan {
     pub fn angle_deg(&self) -> f32 {
         self.angle_deg
     }
+
+    /// Returns precomputed indices where the mask is non-zero.
+    ///
+    /// Use with `valid_t_prime()` for branch-free iteration over valid pixels.
+    pub fn valid_indices(&self) -> &[u16] {
+        &self.valid_indices
+    }
+
+    /// Returns precomputed t_prime values at valid mask indices.
+    ///
+    /// This slice has the same length as `valid_indices()`.
+    pub fn valid_t_prime(&self) -> &[f32] {
+        &self.valid_t_prime
+    }
 }
 
 /// Precomputed masked buffer for SSD matching on rotated templates.
@@ -326,6 +358,10 @@ pub struct MaskedSsdTemplatePlan {
     data: Vec<f32>,
     mask: Arc<[u8]>,
     angle_deg: f32,
+    /// Precomputed indices where mask is non-zero (for branch-free iteration).
+    valid_indices: Vec<u16>,
+    /// Precomputed template data values at valid indices only.
+    valid_data: Vec<f32>,
 }
 
 impl MaskedSsdTemplatePlan {
@@ -386,12 +422,24 @@ impl MaskedSsdTemplatePlan {
             });
         }
 
+        // Precompute valid indices for branch-free iteration in hot loops.
+        let mut valid_indices = Vec::with_capacity(sum_w);
+        let mut valid_data = Vec::with_capacity(sum_w);
+        for (idx, (&m, &d)) in mask.iter().zip(data.iter()).enumerate() {
+            if m != 0 {
+                valid_indices.push(idx as u16);
+                valid_data.push(d);
+            }
+        }
+
         Ok(Self {
             width,
             height,
             data,
             mask,
             angle_deg,
+            valid_indices,
+            valid_data,
         })
     }
 
@@ -418,5 +466,19 @@ impl MaskedSsdTemplatePlan {
     /// Returns the rotation angle in degrees.
     pub fn angle_deg(&self) -> f32 {
         self.angle_deg
+    }
+
+    /// Returns precomputed indices where the mask is non-zero.
+    ///
+    /// Use with `valid_data()` for branch-free iteration over valid pixels.
+    pub fn valid_indices(&self) -> &[u16] {
+        &self.valid_indices
+    }
+
+    /// Returns precomputed template data values at valid mask indices.
+    ///
+    /// This slice has the same length as `valid_indices()`.
+    pub fn valid_data(&self) -> &[f32] {
+        &self.valid_data
     }
 }

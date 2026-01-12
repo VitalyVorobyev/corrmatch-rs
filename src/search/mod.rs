@@ -15,7 +15,7 @@ use crate::search::coarse::{
 #[cfg(feature = "rayon")]
 use crate::search::coarse::{coarse_search_level_par, coarse_search_level_unmasked_par};
 use crate::search::refine::{
-    refine_final_match, refine_final_match_unmasked, refine_to_finer_level,
+    refine_final_match, refine_final_match_unmasked, refine_to_finer_level_batch,
     refine_to_finer_level_unmasked, refine_to_finer_level_unmasked_zncc_integral, Candidate,
 };
 #[cfg(feature = "rayon")]
@@ -378,7 +378,8 @@ impl Matcher {
                         }
                         #[cfg(not(feature = "rayon"))]
                         {
-                            refine_to_finer_level(
+                            // Use batch processing for cache locality in sequential mode
+                            refine_to_finer_level_batch(
                                 level_view,
                                 &self.compiled,
                                 level,
@@ -387,7 +388,14 @@ impl Matcher {
                             )?
                         }
                     } else {
-                        refine_to_finer_level(level_view, &self.compiled, level, &seeds, &self.cfg)?
+                        // Use batch processing for cache locality
+                        refine_to_finer_level_batch(
+                            level_view,
+                            &self.compiled,
+                            level,
+                            &seeds,
+                            &self.cfg,
+                        )?
                     }
                 }
                 RotationMode::Disabled => {

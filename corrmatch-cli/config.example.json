@@ -12,7 +12,7 @@
   },
   "match": {
     "metric": "zncc",
-    "rotation": "disabled",
+    "rotation": "enabled",
     "parallel": false,
     "max_image_levels": 5,
     "beam_width": 8,
@@ -20,7 +20,7 @@
     "nms_radius": 6,
     "roi_radius": 8,
     "angle_half_range_steps": 1,
-    "min_var_i": 1e-8,
+    "min_var_i": 0.1,
     "min_score": 0.65
   }
 }
