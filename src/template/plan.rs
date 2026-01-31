@@ -4,6 +4,15 @@ use crate::image::ImageView;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use std::sync::Arc;
 
+/// Coordinate of a valid (unmasked) template pixel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ValidCoord {
+    /// X coordinate within the template (column).
+    pub x: u16,
+    /// Y coordinate within the template (row).
+    pub y: u16,
+}
+
 /// Precomputed statistics and zero-mean buffer for unmasked ZNCC matching.
 pub struct TemplatePlan {
     width: usize,
@@ -180,12 +189,11 @@ pub struct MaskedTemplatePlan {
     height: usize,
     sum_w: f32,
     var_t: f32,
-    t_prime: Vec<f32>,
     mask: Arc<[u8]>,
     angle_deg: f32,
-    /// Precomputed indices where mask is non-zero (for branch-free iteration).
-    valid_indices: Vec<u16>,
-    /// Precomputed t_prime values at valid indices only.
+    /// Precomputed coordinates where mask is non-zero (for branch-free iteration).
+    valid_coords: Vec<ValidCoord>,
+    /// Precomputed t_prime values at valid coordinates only.
     valid_t_prime: Vec<f32>,
 }
 
@@ -206,6 +214,9 @@ impl MaskedTemplatePlan {
     ) -> CorrMatchResult<Self> {
         let width = rot.width();
         let height = rot.height();
+        if width > u16::MAX as usize || height > u16::MAX as usize {
+            return Err(CorrMatchError::InvalidDimensions { width, height });
+        }
         let needed = width
             .checked_mul(height)
             .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
@@ -219,7 +230,7 @@ impl MaskedTemplatePlan {
             return Err(CorrMatchError::InvalidDimensions { width, height });
         }
 
-        let mut sum_w = 0.0f32;
+        let mut sum_w_count = 0usize;
         let mut sum_wt = 0.0f32;
         for y in 0..height {
             let row = rot.row(y).ok_or_else(|| {
@@ -234,22 +245,24 @@ impl MaskedTemplatePlan {
             })?;
             for (x, &value) in row.iter().enumerate() {
                 let idx = y * width + x;
-                let w = if mask[idx] == 0 { 0.0 } else { 1.0 };
-                let t = value as f32;
-                sum_w += w;
-                sum_wt += w * t;
+                if mask[idx] != 0 {
+                    sum_w_count += 1;
+                    sum_wt += value as f32;
+                }
             }
         }
 
-        if sum_w < 1.0 {
+        if sum_w_count == 0 {
             return Err(CorrMatchError::DegenerateTemplate {
                 reason: "mask has no valid pixels",
             });
         }
 
+        let sum_w = sum_w_count as f32;
         let mu_t = sum_wt / sum_w;
-        let mut t_prime = Vec::with_capacity(needed);
         let mut var_t = 0.0f32;
+        let mut valid_coords = Vec::with_capacity(sum_w_count);
+        let mut valid_t_prime = Vec::with_capacity(sum_w_count);
         for y in 0..height {
             let row = rot.row(y).ok_or_else(|| {
                 let needed = (y + 1)
@@ -263,9 +276,15 @@ impl MaskedTemplatePlan {
             })?;
             for (x, &value) in row.iter().enumerate() {
                 let idx = y * width + x;
-                let w = if mask[idx] == 0 { 0.0 } else { 1.0 };
-                let value = w * (value as f32 - mu_t);
-                t_prime.push(value);
+                if mask[idx] == 0 {
+                    continue;
+                }
+                let value = value as f32 - mu_t;
+                valid_coords.push(ValidCoord {
+                    x: x as u16,
+                    y: y as u16,
+                });
+                valid_t_prime.push(value);
                 var_t += value * value;
             }
         }
@@ -276,27 +295,14 @@ impl MaskedTemplatePlan {
             });
         }
 
-        // Precompute valid indices for branch-free iteration in hot loops.
-        // This eliminates mask branch mispredictions during score computation.
-        let valid_count = sum_w as usize;
-        let mut valid_indices = Vec::with_capacity(valid_count);
-        let mut valid_t_prime = Vec::with_capacity(valid_count);
-        for (idx, (&m, &tp)) in mask.iter().zip(t_prime.iter()).enumerate() {
-            if m != 0 {
-                valid_indices.push(idx as u16);
-                valid_t_prime.push(tp);
-            }
-        }
-
         Ok(Self {
             width,
             height,
             sum_w,
             var_t,
-            t_prime,
             mask,
             angle_deg,
-            valid_indices,
+            valid_coords,
             valid_t_prime,
         })
     }
@@ -321,11 +327,6 @@ impl MaskedTemplatePlan {
         self.var_t
     }
 
-    /// Returns the masked zero-mean template buffer.
-    pub fn t_prime(&self) -> &[f32] {
-        &self.t_prime
-    }
-
     /// Returns the binary mask buffer (0 or 1 per pixel).
     pub fn mask(&self) -> &[u8] {
         self.mask.as_ref()
@@ -336,16 +337,16 @@ impl MaskedTemplatePlan {
         self.angle_deg
     }
 
-    /// Returns precomputed indices where the mask is non-zero.
+    /// Returns precomputed coordinates where the mask is non-zero.
     ///
     /// Use with `valid_t_prime()` for branch-free iteration over valid pixels.
-    pub fn valid_indices(&self) -> &[u16] {
-        &self.valid_indices
+    pub fn valid_coords(&self) -> &[ValidCoord] {
+        &self.valid_coords
     }
 
-    /// Returns precomputed t_prime values at valid mask indices.
+    /// Returns precomputed t_prime values at valid coordinates.
     ///
-    /// This slice has the same length as `valid_indices()`.
+    /// This slice has the same length as `valid_coords()`.
     pub fn valid_t_prime(&self) -> &[f32] {
         &self.valid_t_prime
     }
@@ -355,12 +356,11 @@ impl MaskedTemplatePlan {
 pub struct MaskedSsdTemplatePlan {
     width: usize,
     height: usize,
-    data: Vec<f32>,
     mask: Arc<[u8]>,
     angle_deg: f32,
-    /// Precomputed indices where mask is non-zero (for branch-free iteration).
-    valid_indices: Vec<u16>,
-    /// Precomputed template data values at valid indices only.
+    /// Precomputed coordinates where mask is non-zero (for branch-free iteration).
+    valid_coords: Vec<ValidCoord>,
+    /// Precomputed template data values at valid coordinates only.
     valid_data: Vec<f32>,
 }
 
@@ -381,6 +381,9 @@ impl MaskedSsdTemplatePlan {
     ) -> CorrMatchResult<Self> {
         let width = rot.width();
         let height = rot.height();
+        if width > u16::MAX as usize || height > u16::MAX as usize {
+            return Err(CorrMatchError::InvalidDimensions { width, height });
+        }
         let needed = width
             .checked_mul(height)
             .ok_or(CorrMatchError::InvalidDimensions { width, height })?;
@@ -394,8 +397,35 @@ impl MaskedSsdTemplatePlan {
             return Err(CorrMatchError::InvalidDimensions { width, height });
         }
 
-        let mut data = Vec::with_capacity(needed);
         let mut sum_w = 0usize;
+        for y in 0..height {
+            let row = rot.row(y).ok_or_else(|| {
+                let needed = (y + 1)
+                    .checked_mul(rot.stride())
+                    .and_then(|v| v.checked_add(rot.width()))
+                    .unwrap_or(usize::MAX);
+                CorrMatchError::BufferTooSmall {
+                    needed,
+                    got: rot.as_slice().len(),
+                }
+            })?;
+            for (x, &_value) in row.iter().enumerate() {
+                let idx = y * width + x;
+                if mask[idx] != 0 {
+                    sum_w += 1;
+                }
+            }
+        }
+
+        if sum_w == 0 {
+            return Err(CorrMatchError::DegenerateTemplate {
+                reason: "mask has no valid pixels",
+            });
+        }
+
+        // Precompute valid coordinates for branch-free iteration in hot loops.
+        let mut valid_coords = Vec::with_capacity(sum_w);
+        let mut valid_data = Vec::with_capacity(sum_w);
         for y in 0..height {
             let row = rot.row(y).ok_or_else(|| {
                 let needed = (y + 1)
@@ -409,36 +439,23 @@ impl MaskedSsdTemplatePlan {
             })?;
             for (x, &value) in row.iter().enumerate() {
                 let idx = y * width + x;
-                if mask[idx] != 0 {
-                    sum_w += 1;
+                if mask[idx] == 0 {
+                    continue;
                 }
-                data.push(value as f32);
-            }
-        }
-
-        if sum_w == 0 {
-            return Err(CorrMatchError::DegenerateTemplate {
-                reason: "mask has no valid pixels",
-            });
-        }
-
-        // Precompute valid indices for branch-free iteration in hot loops.
-        let mut valid_indices = Vec::with_capacity(sum_w);
-        let mut valid_data = Vec::with_capacity(sum_w);
-        for (idx, (&m, &d)) in mask.iter().zip(data.iter()).enumerate() {
-            if m != 0 {
-                valid_indices.push(idx as u16);
-                valid_data.push(d);
+                valid_coords.push(ValidCoord {
+                    x: x as u16,
+                    y: y as u16,
+                });
+                valid_data.push(value as f32);
             }
         }
 
         Ok(Self {
             width,
             height,
-            data,
             mask,
             angle_deg,
-            valid_indices,
+            valid_coords,
             valid_data,
         })
     }
@@ -453,11 +470,6 @@ impl MaskedSsdTemplatePlan {
         self.height
     }
 
-    /// Returns the template buffer in row-major order.
-    pub fn data(&self) -> &[f32] {
-        &self.data
-    }
-
     /// Returns the binary mask buffer (0 or 1 per pixel).
     pub fn mask(&self) -> &[u8] {
         self.mask.as_ref()
@@ -468,16 +480,16 @@ impl MaskedSsdTemplatePlan {
         self.angle_deg
     }
 
-    /// Returns precomputed indices where the mask is non-zero.
+    /// Returns precomputed coordinates where the mask is non-zero.
     ///
     /// Use with `valid_data()` for branch-free iteration over valid pixels.
-    pub fn valid_indices(&self) -> &[u16] {
-        &self.valid_indices
+    pub fn valid_coords(&self) -> &[ValidCoord] {
+        &self.valid_coords
     }
 
-    /// Returns precomputed template data values at valid mask indices.
+    /// Returns precomputed template data values at valid coordinates.
     ///
-    /// This slice has the same length as `valid_indices()`.
+    /// This slice has the same length as `valid_coords()`.
     pub fn valid_data(&self) -> &[f32] {
         &self.valid_data
     }

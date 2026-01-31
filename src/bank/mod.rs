@@ -11,7 +11,7 @@ mod angles;
 
 pub use angles::AngleGrid;
 
-use crate::image::pyramid::ImagePyramid;
+use crate::image::pyramid::{downsample_u8_2x2_box, ImagePyramid};
 use crate::image::{ImageView, OwnedImage};
 use crate::template::rotate::rotate_u8_bilinear_masked;
 use crate::template::{
@@ -51,58 +51,6 @@ fn trim_degenerate_levels(levels: &mut Vec<OwnedImage>, min_dim: usize) -> CorrM
             Err(err) => return Err(err),
         }
     }
-}
-
-fn downsample_u8(src: ImageView<'_, u8>) -> CorrMatchResult<OwnedImage> {
-    let width = src.width();
-    let height = src.height();
-    if width < 2 || height < 2 {
-        return Err(CorrMatchError::InvalidDimensions { width, height });
-    }
-
-    let dst_width = width / 2;
-    let dst_height = height / 2;
-    let dst_len = dst_width
-        .checked_mul(dst_height)
-        .ok_or(CorrMatchError::InvalidDimensions {
-            width: dst_width,
-            height: dst_height,
-        })?;
-    let mut dst = vec![0u8; dst_len];
-
-    for y in 0..dst_height {
-        let row0 = src.row(y * 2).ok_or_else(|| {
-            let needed = (y * 2 + 1)
-                .checked_mul(src.stride())
-                .and_then(|v| v.checked_add(src.width()))
-                .unwrap_or(usize::MAX);
-            CorrMatchError::BufferTooSmall {
-                needed,
-                got: src.as_slice().len(),
-            }
-        })?;
-        let row1 = src.row(y * 2 + 1).ok_or_else(|| {
-            let needed = (y * 2 + 2)
-                .checked_mul(src.stride())
-                .and_then(|v| v.checked_add(src.width()))
-                .unwrap_or(usize::MAX);
-            CorrMatchError::BufferTooSmall {
-                needed,
-                got: src.as_slice().len(),
-            }
-        })?;
-
-        for x in 0..dst_width {
-            let a = row0[2 * x];
-            let b = row0[2 * x + 1];
-            let c = row1[2 * x];
-            let d = row1[2 * x + 1];
-            let sum = u16::from(a) + u16::from(b) + u16::from(c) + u16::from(d);
-            dst[y * dst_width + x] = ((sum + 2) / 4) as u8;
-        }
-    }
-
-    OwnedImage::new(dst, dst_width, dst_height)
 }
 
 fn downsample_mask(mask: &[u8], width: usize, height: usize) -> CorrMatchResult<Vec<u8>> {
@@ -154,7 +102,7 @@ fn rotate_downsample_to_level(
     let (mut img, mut mask) = rotate_u8_bilinear_masked(base, angle, fill);
     for _ in 0..level {
         let view = img.view();
-        let next_img = downsample_u8(view)?;
+        let next_img = downsample_u8_2x2_box(view)?;
         let next_mask = downsample_mask(&mask, view.width(), view.height())?;
         img = next_img;
         mask = next_mask;

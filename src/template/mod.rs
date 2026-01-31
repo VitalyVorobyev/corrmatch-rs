@@ -7,6 +7,7 @@ use crate::util::CorrMatchResult;
 mod plan;
 pub mod rotate;
 
+pub use plan::ValidCoord;
 pub use plan::{MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, TemplatePlan};
 
 /// Owned template image in contiguous grayscale format.

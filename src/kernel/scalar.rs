@@ -45,24 +45,21 @@ impl ZnccMaskedScalar {
         x: usize,
         min_var_i: f32,
     ) -> f32 {
-        let tpl_width = tpl.width();
         let sum_w = tpl.sum_w();
         let var_t = tpl.var_t();
         if var_t <= 1e-8 {
             return f32::NEG_INFINITY;
         }
 
-        let valid_indices = tpl.valid_indices();
+        let valid_coords = tpl.valid_coords();
         let valid_t_prime = tpl.valid_t_prime();
 
         let mut dot = 0.0f32;
         let mut sum_i = 0.0f32;
         let mut sum_i2 = 0.0f32;
 
-        for (i, &idx) in valid_indices.iter().enumerate() {
-            let ty = idx as usize / tpl_width;
-            let tx = idx as usize % tpl_width;
-            let value = cached_rows[ty][x + tx] as f32;
+        for (i, coord) in valid_coords.iter().enumerate() {
+            let value = cached_rows[coord.y as usize][x + coord.x as usize] as f32;
             dot += valid_t_prime[i] * value;
             sum_i += value;
             sum_i2 += value * value;
@@ -140,7 +137,7 @@ impl ZnccMaskedScalar {
 
         // Use precomputed valid indices for branch-free iteration.
         // This eliminates ~30-50% branch mispredictions from mask checks.
-        let valid_indices = tpl.valid_indices();
+        let valid_coords = tpl.valid_coords();
         let valid_t_prime = tpl.valid_t_prime();
 
         let mut topk_buf = TopK::new(params.topk);
@@ -151,11 +148,11 @@ impl ZnccMaskedScalar {
                 let mut sum_i2 = 0.0f32;
 
                 // Iterate only over valid pixels (no mask branch).
-                for (i, &idx) in valid_indices.iter().enumerate() {
-                    let ty = idx as usize / tpl_width;
-                    let tx = idx as usize % tpl_width;
-                    let img_row = image.row(y + ty).expect("row within bounds for scan");
-                    let value = img_row[x + tx] as f32;
+                for (i, coord) in valid_coords.iter().enumerate() {
+                    let img_row = image
+                        .row(y + coord.y as usize)
+                        .expect("row within bounds for scan");
+                    let value = img_row[x + coord.x as usize] as f32;
                     dot += valid_t_prime[i] * value;
                     sum_i += value;
                     sum_i2 += value * value;
@@ -212,18 +209,18 @@ impl Kernel for ZnccMaskedScalar {
         }
 
         // Use precomputed valid indices for branch-free iteration.
-        let valid_indices = tpl.valid_indices();
+        let valid_coords = tpl.valid_coords();
         let valid_t_prime = tpl.valid_t_prime();
 
         let mut dot = 0.0f32;
         let mut sum_i = 0.0f32;
         let mut sum_i2 = 0.0f32;
 
-        for (i, &idx) in valid_indices.iter().enumerate() {
-            let ty = idx as usize / tpl_width;
-            let tx = idx as usize % tpl_width;
-            let img_row = image.row(y + ty).expect("row within bounds for score");
-            let value = img_row[x + tx] as f32;
+        for (i, coord) in valid_coords.iter().enumerate() {
+            let img_row = image
+                .row(y + coord.y as usize)
+                .expect("row within bounds for score");
+            let value = img_row[x + coord.x as usize] as f32;
             dot += valid_t_prime[i] * value;
             sum_i += value;
             sum_i2 += value * value;
@@ -305,16 +302,16 @@ impl Kernel for SsdMaskedScalar {
             return f32::NEG_INFINITY;
         }
 
-        // Use precomputed valid indices for branch-free iteration.
-        let valid_indices = tpl.valid_indices();
+        // Use precomputed valid coordinates for branch-free iteration.
+        let valid_coords = tpl.valid_coords();
         let valid_data = tpl.valid_data();
         let mut sse = 0.0f32;
 
-        for (i, &idx) in valid_indices.iter().enumerate() {
-            let ty = idx as usize / tpl_width;
-            let tx = idx as usize % tpl_width;
-            let img_row = image.row(y + ty).expect("row within bounds for score");
-            let value = img_row[x + tx] as f32;
+        for (i, coord) in valid_coords.iter().enumerate() {
+            let img_row = image
+                .row(y + coord.y as usize)
+                .expect("row within bounds for score");
+            let value = img_row[x + coord.x as usize] as f32;
             let diff = value - valid_data[i];
             sse += diff * diff;
         }
@@ -381,15 +378,12 @@ impl SsdMaskedScalar {
         tpl: &MaskedSsdTemplatePlan,
         x: usize,
     ) -> f32 {
-        let tpl_width = tpl.width();
-        let valid_indices = tpl.valid_indices();
+        let valid_coords = tpl.valid_coords();
         let valid_data = tpl.valid_data();
 
         let mut sse = 0.0f32;
-        for (i, &idx) in valid_indices.iter().enumerate() {
-            let ty = idx as usize / tpl_width;
-            let tx = idx as usize % tpl_width;
-            let value = cached_rows[ty][x + tx] as f32;
+        for (i, coord) in valid_coords.iter().enumerate() {
+            let value = cached_rows[coord.y as usize][x + coord.x as usize] as f32;
             let diff = value - valid_data[i];
             sse += diff * diff;
         }
@@ -452,7 +446,7 @@ impl SsdMaskedScalar {
         }
 
         // Use precomputed valid indices for branch-free iteration.
-        let valid_indices = tpl.valid_indices();
+        let valid_coords = tpl.valid_coords();
         let valid_data = tpl.valid_data();
         let mut topk_buf = TopK::new(params.topk);
 
@@ -461,11 +455,11 @@ impl SsdMaskedScalar {
                 let mut sse = 0.0f32;
 
                 // Iterate only over valid pixels (no mask branch).
-                for (i, &idx) in valid_indices.iter().enumerate() {
-                    let ty = idx as usize / tpl_width;
-                    let tx = idx as usize % tpl_width;
-                    let img_row = image.row(y + ty).expect("row within bounds for scan");
-                    let value = img_row[x + tx] as f32;
+                for (i, coord) in valid_coords.iter().enumerate() {
+                    let img_row = image
+                        .row(y + coord.y as usize)
+                        .expect("row within bounds for scan");
+                    let value = img_row[x + coord.x as usize] as f32;
                     let diff = value - valid_data[i];
                     sse += diff * diff;
                 }

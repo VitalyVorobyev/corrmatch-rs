@@ -7,6 +7,58 @@
 use crate::image::{ImageView, OwnedImage};
 use crate::util::{CorrMatchError, CorrMatchResult};
 
+pub(crate) fn downsample_u8_2x2_box(src: ImageView<'_, u8>) -> CorrMatchResult<OwnedImage> {
+    let width = src.width();
+    let height = src.height();
+    if width < 2 || height < 2 {
+        return Err(CorrMatchError::InvalidDimensions { width, height });
+    }
+
+    let dst_width = width / 2;
+    let dst_height = height / 2;
+    let dst_len = dst_width
+        .checked_mul(dst_height)
+        .ok_or(CorrMatchError::InvalidDimensions {
+            width: dst_width,
+            height: dst_height,
+        })?;
+    let mut dst = vec![0u8; dst_len];
+
+    for y in 0..dst_height {
+        let row0 = src.row(y * 2).ok_or_else(|| {
+            let needed = (y * 2 + 1)
+                .checked_mul(src.stride())
+                .and_then(|v| v.checked_add(src.width()))
+                .unwrap_or(usize::MAX);
+            CorrMatchError::BufferTooSmall {
+                needed,
+                got: src.as_slice().len(),
+            }
+        })?;
+        let row1 = src.row(y * 2 + 1).ok_or_else(|| {
+            let needed = (y * 2 + 2)
+                .checked_mul(src.stride())
+                .and_then(|v| v.checked_add(src.width()))
+                .unwrap_or(usize::MAX);
+            CorrMatchError::BufferTooSmall {
+                needed,
+                got: src.as_slice().len(),
+            }
+        })?;
+
+        for x in 0..dst_width {
+            let a = row0[2 * x];
+            let b = row0[2 * x + 1];
+            let c = row1[2 * x];
+            let d = row1[2 * x + 1];
+            let sum = u16::from(a) + u16::from(b) + u16::from(c) + u16::from(d);
+            dst[y * dst_width + x] = ((sum + 2) / 4) as u8;
+        }
+    }
+
+    OwnedImage::new(dst, dst_width, dst_height)
+}
+
 /// Owned image pyramid built from a base level.
 pub struct ImagePyramid {
     levels: Vec<OwnedImage>,
@@ -27,51 +79,7 @@ impl ImagePyramid {
             if src.width() < 2 || src.height() < 2 {
                 break;
             }
-
-            let dst_width = src.width() / 2;
-            let dst_height = src.height() / 2;
-            let dst_len =
-                dst_width
-                    .checked_mul(dst_height)
-                    .ok_or(CorrMatchError::InvalidDimensions {
-                        width: dst_width,
-                        height: dst_height,
-                    })?;
-            let mut dst = vec![0u8; dst_len];
-
-            for y in 0..dst_height {
-                let row0 = src.row(y * 2).ok_or_else(|| {
-                    let needed = (y * 2 + 1)
-                        .checked_mul(src.stride())
-                        .and_then(|v| v.checked_add(src.width()))
-                        .unwrap_or(usize::MAX);
-                    CorrMatchError::BufferTooSmall {
-                        needed,
-                        got: src.as_slice().len(),
-                    }
-                })?;
-                let row1 = src.row(y * 2 + 1).ok_or_else(|| {
-                    let needed = (y * 2 + 2)
-                        .checked_mul(src.stride())
-                        .and_then(|v| v.checked_add(src.width()))
-                        .unwrap_or(usize::MAX);
-                    CorrMatchError::BufferTooSmall {
-                        needed,
-                        got: src.as_slice().len(),
-                    }
-                })?;
-
-                for x in 0..dst_width {
-                    let a = row0[2 * x];
-                    let b = row0[2 * x + 1];
-                    let c = row1[2 * x];
-                    let d = row1[2 * x + 1];
-                    let sum = u16::from(a) + u16::from(b) + u16::from(c) + u16::from(d);
-                    dst[y * dst_width + x] = ((sum + 2) / 4) as u8;
-                }
-            }
-
-            levels.push(OwnedImage::new(dst, dst_width, dst_height)?);
+            levels.push(downsample_u8_2x2_box(src)?);
         }
 
         Ok(Self { levels })

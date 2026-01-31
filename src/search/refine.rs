@@ -5,7 +5,7 @@
 
 use crate::bank::CompiledTemplate;
 use crate::candidate::nms::nms_2d;
-use crate::candidate::topk::Peak;
+use crate::candidate::topk::{Peak, TopK};
 use crate::image::integral::IntegralImages;
 use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
 use crate::kernel::{Kernel, ScanParams};
@@ -249,6 +249,7 @@ pub(crate) fn refine_to_finer_level_batch(
     let min_var_i = cfg.min_var_i;
     let min_score = cfg.min_score;
     let mut all_peaks = Vec::new();
+    let mut cached_rows: Vec<&[u8]> = Vec::with_capacity(tpl_height);
 
     // Process each candidate's ROI with batch angle evaluation
     for cand in prev.iter().copied() {
@@ -266,73 +267,72 @@ pub(crate) fn refine_to_finer_level_batch(
             continue;
         }
 
-        // Pre-fetch plans for all angles (these are already compiled, just need references)
-        let plans: Vec<_> = match cfg.metric {
-            Metric::Zncc => angle_indices
-                .iter()
-                .filter_map(|&ai| compiled.rotated_zncc_plan(finer_level, ai).ok())
-                .collect(),
-            Metric::Ssd => Vec::new(), // SSD handled separately
-        };
-
-        let ssd_plans: Vec<_> = match cfg.metric {
-            Metric::Ssd => angle_indices
-                .iter()
-                .filter_map(|&ai| compiled.rotated_ssd_plan(finer_level, ai).ok())
-                .collect(),
-            Metric::Zncc => Vec::new(),
-        };
-
         // Iterate over positions: for each (x, y), evaluate ALL angles with cached rows
         let (x0, y0, x1, y1) = roi;
-        for y in y0..=y1 {
-            // Cache image rows for this y position (covering template height)
-            let mut cached_rows: Vec<&[u8]> = Vec::with_capacity(tpl_height);
-            let mut rows_valid = true;
-            for ty in 0..tpl_height {
-                if let Some(row) = image.row(y + ty) {
-                    cached_rows.push(row);
-                } else {
-                    rows_valid = false;
-                    break;
+        match cfg.metric {
+            Metric::Zncc => {
+                let mut angle_plans = Vec::with_capacity(angle_indices.len());
+                for &angle_idx in &angle_indices {
+                    let plan = compiled.rotated_zncc_plan(finer_level, angle_idx)?;
+                    angle_plans.push((angle_idx, plan, TopK::new(cfg.per_angle_topk)));
                 }
-            }
-            if !rows_valid {
-                continue;
-            }
 
-            for x in x0..=x1 {
-                // Score across ALL angles using the cached rows
-                match cfg.metric {
-                    Metric::Zncc => {
-                        for (plan_idx, plan) in plans.iter().enumerate() {
-                            let angle_idx = angle_indices[plan_idx];
+                for y in y0..=y1 {
+                    cached_rows.clear();
+                    for ty in 0..tpl_height {
+                        cached_rows.push(image.row(y + ty).expect("row within bounds"));
+                    }
+
+                    for x in x0..=x1 {
+                        for (angle_idx, plan, topk) in angle_plans.iter_mut() {
                             let score =
                                 ZnccMaskedScalar::score_at_cached(&cached_rows, plan, x, min_var_i);
                             if score.is_finite() && score >= min_score {
-                                all_peaks.push(Peak {
+                                topk.push(Peak {
                                     x,
                                     y,
                                     score,
-                                    angle_idx,
+                                    angle_idx: *angle_idx,
                                 });
                             }
                         }
                     }
-                    Metric::Ssd => {
-                        for (plan_idx, plan) in ssd_plans.iter().enumerate() {
-                            let angle_idx = angle_indices[plan_idx];
+                }
+
+                for (_angle_idx, _plan, topk) in angle_plans {
+                    all_peaks.extend(topk.into_sorted_desc());
+                }
+            }
+            Metric::Ssd => {
+                let mut angle_plans = Vec::with_capacity(angle_indices.len());
+                for &angle_idx in &angle_indices {
+                    let plan = compiled.rotated_ssd_plan(finer_level, angle_idx)?;
+                    angle_plans.push((angle_idx, plan, TopK::new(cfg.per_angle_topk)));
+                }
+
+                for y in y0..=y1 {
+                    cached_rows.clear();
+                    for ty in 0..tpl_height {
+                        cached_rows.push(image.row(y + ty).expect("row within bounds"));
+                    }
+
+                    for x in x0..=x1 {
+                        for (angle_idx, plan, topk) in angle_plans.iter_mut() {
                             let score = SsdMaskedScalar::score_at_cached(&cached_rows, plan, x);
                             if score.is_finite() && score >= min_score {
-                                all_peaks.push(Peak {
+                                topk.push(Peak {
                                     x,
                                     y,
                                     score,
-                                    angle_idx,
+                                    angle_idx: *angle_idx,
                                 });
                             }
                         }
                     }
+                }
+
+                for (_angle_idx, _plan, topk) in angle_plans {
+                    all_peaks.extend(topk.into_sorted_desc());
                 }
             }
         }
