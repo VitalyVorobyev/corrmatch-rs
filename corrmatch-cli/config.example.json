@@ -1,8 +1,8 @@
 {
-  "image_path": "synthetic_cases/blur_sigma_1_5/image.png",
-  "template_path": "synthetic_cases/blur_sigma_1_5/template.png",
-  "output_path": "blur_sigma_result.json",
-  "topk": 1,
+  "image_path": "synthetic_cases/clean_translation/image.png",
+  "template_path": "synthetic_cases/clean_translation/template.png",
+  "output_path": "clean_translation_result.json",
+  "topk": 3,
   "compile": {
     "max_levels": 3,
     "coarse_step_deg": 30.0,
@@ -15,12 +15,12 @@
     "rotation": "enabled",
     "parallel": false,
     "max_image_levels": 5,
-    "beam_width": 8,
+    "beam_width": 4,
     "per_angle_topk": 3,
     "nms_radius": 6,
-    "roi_radius": 8,
+    "roi_radius": 2,
     "angle_half_range_steps": 1,
-    "min_var_i": 0.1,
+    "min_var_i": 100,
     "min_score": 0.65
   }
 }
