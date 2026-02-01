@@ -1,0 +1,25 @@
+{
+  "compile": {
+    "coarse_step_deg": 30.0,
+    "fill_value": 0,
+    "max_levels": 5,
+    "min_step_deg": 7.5,
+    "precompute_coarsest": true
+  },
+  "image_path": "image.png",
+  "match": {
+    "angle_half_range_steps": 1,
+    "beam_width": 6,
+    "max_image_levels": 5,
+    "metric": "zncc",
+    "min_score": -1e+38,
+    "min_var_i": 1e-08,
+    "nms_radius": 4,
+    "parallel": false,
+    "per_angle_topk": 3,
+    "roi_radius": 6,
+    "rotation": "disabled"
+  },
+  "template_path": "template.png",
+  "topk": 1
+}

@@ -15,6 +15,38 @@ pub struct ScanParams {
     pub min_score: f32,
 }
 
+/// Inclusive ROI bounds for scan operations (placement coordinates).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ScanRoi {
+    pub(crate) x0: usize,
+    pub(crate) y0: usize,
+    pub(crate) x1: usize,
+    pub(crate) y1: usize,
+}
+
+impl ScanRoi {
+    pub(crate) fn new(x0: usize, y0: usize, x1: usize, y1: usize) -> Self {
+        Self { x0, y0, x1, y1 }
+    }
+
+    pub(crate) fn clamp_inclusive(self, max_x: usize, max_y: usize) -> Option<Self> {
+        if self.x0 > max_x || self.y0 > max_y {
+            return None;
+        }
+        let x1 = self.x1.min(max_x);
+        let y1 = self.y1.min(max_y);
+        if self.x0 > x1 || self.y0 > y1 {
+            return None;
+        }
+        Some(Self {
+            x0: self.x0,
+            y0: self.y0,
+            x1,
+            y1,
+        })
+    }
+}
+
 /// Kernel trait for scoring and scan operations.
 pub trait Kernel {
     type Plan;

@@ -14,5 +14,5 @@ pub use crate::search::scan::{
 };
 pub use crate::template::rotate::{rotate_u8_bilinear, rotate_u8_bilinear_masked};
 pub use crate::template::{
-    MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, TemplatePlan,
+    MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, TemplatePlan, ValidCoord,
 };

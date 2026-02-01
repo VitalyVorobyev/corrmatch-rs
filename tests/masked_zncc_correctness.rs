@@ -10,8 +10,8 @@ fn brute_force_best(image: ImageView<'_, u8>, tpl: &MaskedTemplatePlan) -> (usiz
     let tpl_h = tpl.height();
     let sum_w = tpl.sum_w() as f64;
     let var_t = tpl.var_t() as f64;
-    let t_prime = tpl.t_prime();
-    let mask = tpl.mask();
+    let valid_coords = tpl.valid_coords();
+    let valid_t_prime = tpl.valid_t_prime();
 
     let max_y = image.height() - tpl_h;
     let max_x = image.width() - tpl_w;
@@ -26,17 +26,12 @@ fn brute_force_best(image: ImageView<'_, u8>, tpl: &MaskedTemplatePlan) -> (usiz
             let mut sum_i = 0.0f64;
             let mut sum_i2 = 0.0f64;
 
-            for ty in 0..tpl_h {
-                let row = image.row(y + ty).expect("row in bounds");
-                let base = ty * tpl_w;
-                for tx in 0..tpl_w {
-                    let idx = base + tx;
-                    let w = if mask[idx] == 0 { 0.0 } else { 1.0 };
-                    let value = row[x + tx] as f64;
-                    dot += t_prime[idx] as f64 * value;
-                    sum_i += w * value;
-                    sum_i2 += w * value * value;
-                }
+            for (i, coord) in valid_coords.iter().enumerate() {
+                let row = image.row(y + coord.y as usize).expect("row in bounds");
+                let value = row[x + coord.x as usize] as f64;
+                dot += valid_t_prime[i] as f64 * value;
+                sum_i += value;
+                sum_i2 += value * value;
             }
 
             let var_i = sum_i2 - (sum_i * sum_i) / sum_w;

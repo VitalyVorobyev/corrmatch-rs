@@ -91,6 +91,36 @@ matcher = compiled.matcher(match_cfg)
 tpl = corrmatch.Template.from_file("template.png")
 ```
 
+## Visualization (matplotlib)
+
+CorrMatch includes a small visualization helper to inspect results in an
+interactive matplotlib window (rotated detection frame + template + matched
+patch + deskew + diff).
+
+Install extra dependencies:
+
+```bash
+pip install -e ".[viz]"
+```
+
+Run from Python:
+
+```python
+import corrmatch
+import corrmatch.viz as viz
+
+match_cfg = corrmatch.MatchConfig(rotation="enabled", metric="zncc")
+fig, matches = viz.match_and_show(image, template, topk=5, match_cfg=match_cfg)
+```
+
+Or as a CLI:
+
+```bash
+corrmatch-viz --image image.png --template template.png --rotation enabled --topk 5
+```
+
+Angle convention: positive angles are **clockwise** (x right, y down).
+
 ## API Reference
 
 ### Classes

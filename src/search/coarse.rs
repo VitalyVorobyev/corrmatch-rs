@@ -5,9 +5,10 @@
 
 use crate::bank::CompiledTemplate;
 use crate::candidate::nms::nms_2d;
-use crate::kernel::scalar::{
-    SsdMaskedScalar, SsdUnmaskedScalar, ZnccMaskedScalar, ZnccUnmaskedScalar,
-};
+use crate::image::integral::IntegralImages;
+#[cfg(feature = "rayon")]
+use crate::kernel::rayon::{ssd_unmasked_scan_full_par, zncc_unmasked_scan_full_par};
+use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
 use crate::kernel::{Kernel, ScanParams};
 use crate::search::refine::Candidate;
 use crate::search::{MatchConfig, Metric};
@@ -15,6 +16,12 @@ use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
+
+// Kernel type aliases for unmasked kernels - use SIMD when available
+#[cfg(not(feature = "simd"))]
+use crate::kernel::scalar::{SsdUnmaskedScalar as SsdUnmasked, ZnccUnmaskedScalar as ZnccUnmasked};
+#[cfg(feature = "simd")]
+use crate::kernel::simd::{SsdUnmaskedSimd as SsdUnmasked, ZnccUnmaskedSimd as ZnccUnmasked};
 
 pub(crate) fn coarse_search_level(
     image: ImageView<'_, u8>,
@@ -29,6 +36,8 @@ pub(crate) fn coarse_search_level(
             len: compiled.num_levels(),
             context: "level",
         })?;
+
+    let _span = trace_span!("coarse_search", level = level, angles = grid.len()).entered();
 
     let params = ScanParams {
         topk: cfg.per_angle_topk,
@@ -73,6 +82,7 @@ pub(crate) fn coarse_search_level(
         out.push(Candidate::from_peak(level, angle_deg, peak));
     }
 
+    trace_event!("coarse_candidates", count = out.len());
     Ok(out)
 }
 
@@ -83,6 +93,8 @@ pub(crate) fn coarse_search_level_unmasked(
     level: usize,
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("coarse_search", level = level, angles = 1).entered();
+
     let params = ScanParams {
         topk: cfg.per_angle_topk,
         min_var_i: cfg.min_var_i,
@@ -91,11 +103,11 @@ pub(crate) fn coarse_search_level_unmasked(
     let mut peaks = match cfg.metric {
         Metric::Zncc => {
             let plan = compiled.unmasked_zncc_plan(level)?;
-            <ZnccUnmaskedScalar as Kernel>::scan_full(image, plan, 0, params)?
+            <ZnccUnmasked as Kernel>::scan_full(image, plan, 0, params)?
         }
         Metric::Ssd => {
             let plan = compiled.unmasked_ssd_plan(level)?;
-            <SsdUnmaskedScalar as Kernel>::scan_full(image, plan, 0, params)?
+            <SsdUnmasked as Kernel>::scan_full(image, plan, 0, params)?
         }
     };
     if peaks.is_empty() {
@@ -112,6 +124,43 @@ pub(crate) fn coarse_search_level_unmasked(
         out.push(Candidate::from_peak(level, 0.0, peak));
     }
 
+    trace_event!("coarse_candidates", count = out.len());
+    Ok(out)
+}
+
+/// Coarse search without rotation using an unmasked ZNCC kernel with integrals.
+pub(crate) fn coarse_search_level_unmasked_zncc_integral(
+    image: ImageView<'_, u8>,
+    compiled: &CompiledTemplate,
+    level: usize,
+    cfg: &MatchConfig,
+    integrals: &IntegralImages,
+) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("coarse_search", level = level, angles = 1).entered();
+
+    debug_assert!(matches!(cfg.metric, Metric::Zncc));
+    let params = ScanParams {
+        topk: cfg.per_angle_topk,
+        min_var_i: cfg.min_var_i,
+        min_score: cfg.min_score,
+    };
+    let plan = compiled.unmasked_zncc_plan(level)?;
+    let mut peaks = ZnccUnmasked::scan_full_integral(image, plan, 0, params, integrals)?;
+    if peaks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut kept = nms_2d(&mut peaks, cfg.nms_radius);
+    if kept.len() > cfg.beam_width {
+        kept.truncate(cfg.beam_width);
+    }
+
+    let mut out = Vec::with_capacity(kept.len());
+    for peak in kept.drain(..) {
+        out.push(Candidate::from_peak(level, 0.0, peak));
+    }
+
+    trace_event!("coarse_candidates", count = out.len());
     Ok(out)
 }
 
@@ -130,6 +179,14 @@ pub(crate) fn coarse_search_level_par(
             len: compiled.num_levels(),
             context: "level",
         })?;
+
+    let _span = trace_span!(
+        "coarse_search",
+        level = level,
+        angles = grid.len(),
+        parallel = true
+    )
+    .entered();
 
     let params = ScanParams {
         topk: cfg.per_angle_topk,
@@ -169,10 +226,13 @@ pub(crate) fn coarse_search_level_par(
         out.push(Candidate::from_peak(level, angle_deg, peak));
     }
 
+    trace_event!("coarse_candidates", count = out.len());
     Ok(out)
 }
 
 /// Coarse search without rotation using an unmasked kernel (parallel).
+///
+/// Uses row-parallel scanning to distribute work across threads.
 #[cfg(feature = "rayon")]
 pub(crate) fn coarse_search_level_unmasked_par(
     image: ImageView<'_, u8>,
@@ -180,19 +240,22 @@ pub(crate) fn coarse_search_level_unmasked_par(
     level: usize,
     cfg: &MatchConfig,
 ) -> CorrMatchResult<Vec<Candidate>> {
+    let _span = trace_span!("coarse_search", level = level, angles = 1, parallel = true).entered();
+
     let params = ScanParams {
         topk: cfg.per_angle_topk,
         min_var_i: cfg.min_var_i,
         min_score: cfg.min_score,
     };
+    // Use row-parallel scan functions for actual parallelization
     let mut peaks = match cfg.metric {
         Metric::Zncc => {
             let plan = compiled.unmasked_zncc_plan(level)?;
-            <ZnccUnmaskedScalar as Kernel>::scan_full(image, plan, 0, params)?
+            zncc_unmasked_scan_full_par(image, plan, 0, params)?
         }
         Metric::Ssd => {
             let plan = compiled.unmasked_ssd_plan(level)?;
-            <SsdUnmaskedScalar as Kernel>::scan_full(image, plan, 0, params)?
+            ssd_unmasked_scan_full_par(image, plan, 0, params)?
         }
     };
     if peaks.is_empty() {
@@ -209,5 +272,6 @@ pub(crate) fn coarse_search_level_unmasked_par(
         out.push(Candidate::from_peak(level, 0.0, peak));
     }
 
+    trace_event!("coarse_candidates", count = out.len());
     Ok(out)
 }

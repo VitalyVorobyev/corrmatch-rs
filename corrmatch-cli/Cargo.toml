@@ -1,11 +1,24 @@
 [package]
 name = "corrmatch-cli"
 version = "0.1.0"
+description = "CLI tool for corrmatch (JSON config driven)"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+readme = "README.md"
+include = [
+    "src/**",
+    "config.schema.json",
+    "config.example.json",
+    "README.md",
+    "Cargo.toml",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-corrmatch = { path = "..", features = ["image-io"] }
+corrmatch = { version = "0.1.0", path = "..", features = ["image-io", "tracing"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

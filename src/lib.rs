@@ -39,7 +39,7 @@
 //!
 //! # Feature flags
 //! - `rayon`: parallel search execution.
-//! - `simd`: SIMD-accelerated kernels (planned).
+//! - `simd`: SIMD-accelerated kernels (currently: unmasked translation-only path).
 //! - `image-io`: file I/O helpers via the `image` crate.
 //!
 //! # Low-level API
@@ -47,6 +47,10 @@
 //!
 //! # CLI
 //! A JSON-driven CLI lives in the `corrmatch-cli` workspace crate.
+
+// Macros must be defined before modules that use them
+#[macro_use]
+mod trace;
 
 mod bank;
 mod candidate;

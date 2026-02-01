@@ -1,0 +1,91 @@
+{
+  "background": {
+    "style": "mixed",
+    "value": null
+  },
+  "case_id": "distractors_topk",
+  "cli_config": {
+    "compile": {
+      "coarse_step_deg": 30.0,
+      "fill_value": 0,
+      "max_levels": 4,
+      "min_step_deg": 7.5,
+      "precompute_coarsest": true
+    },
+    "image_path": "image.png",
+    "match": {
+      "angle_half_range_steps": 1,
+      "beam_width": 6,
+      "max_image_levels": 4,
+      "metric": "zncc",
+      "min_score": -1e+38,
+      "min_var_i": 1e-08,
+      "nms_radius": 4,
+      "parallel": false,
+      "per_angle_topk": 4,
+      "roi_radius": 6,
+      "rotation": "disabled"
+    },
+    "template_path": "template.png",
+    "topk": 4
+  },
+  "effects": {
+    "blur_sigma": 0.0,
+    "global_bias": 0.0,
+    "global_gain": 1.0,
+    "noise_sigma": 0.0,
+    "occlusion_frac": 0.0,
+    "salt_pepper": 0.0,
+    "template_bias": 0.0,
+    "template_gain": 1.0
+  },
+  "family": "distractors",
+  "image": {
+    "height": 320,
+    "width": 420
+  },
+  "instances": [
+    {
+      "angle_deg": 0.0,
+      "bias": 0.0,
+      "gain": 1.0,
+      "kind": "target",
+      "x": 244,
+      "y": 113
+    },
+    {
+      "angle_deg": 0.0,
+      "bias": 4.772869183874789,
+      "gain": 1.057097668548964,
+      "kind": "distractor",
+      "x": 93,
+      "y": 214
+    },
+    {
+      "angle_deg": 0.0,
+      "bias": -2.793318559911696,
+      "gain": 1.007545884731159,
+      "kind": "distractor",
+      "x": 125,
+      "y": 48
+    },
+    {
+      "angle_deg": 0.0,
+      "bias": -2.510739989732712,
+      "gain": 1.039902639661988,
+      "kind": "distractor",
+      "x": 189,
+      "y": 240
+    }
+  ],
+  "notes": "",
+  "occlusion": null,
+  "present": true,
+  "rotation_deg": 0.0,
+  "seed": 4090102987,
+  "template": {
+    "height": 60,
+    "pattern": "rings",
+    "width": 80
+  }
+}

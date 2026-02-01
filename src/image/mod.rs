@@ -11,6 +11,7 @@
 
 use crate::util::{CorrMatchError, CorrMatchResult};
 
+pub(crate) mod integral;
 #[cfg(feature = "image-io")]
 pub mod io;
 pub mod pyramid;

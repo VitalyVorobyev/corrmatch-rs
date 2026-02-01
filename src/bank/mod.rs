@@ -11,13 +11,15 @@ mod angles;
 
 pub use angles::AngleGrid;
 
-use crate::image::pyramid::ImagePyramid;
+use crate::image::pyramid::{downsample_u8_2x2_box, ImagePyramid};
 use crate::image::{ImageView, OwnedImage};
 use crate::template::rotate::rotate_u8_bilinear_masked;
 use crate::template::{
     MaskedSsdTemplatePlan, MaskedTemplatePlan, SsdTemplatePlan, Template, TemplatePlan,
 };
 use crate::util::{CorrMatchError, CorrMatchResult};
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
 use std::sync::{Arc, OnceLock};
 
 fn trim_degenerate_levels(levels: &mut Vec<OwnedImage>, min_dim: usize) -> CorrMatchResult<()> {
@@ -49,58 +51,6 @@ fn trim_degenerate_levels(levels: &mut Vec<OwnedImage>, min_dim: usize) -> CorrM
             Err(err) => return Err(err),
         }
     }
-}
-
-fn downsample_u8(src: ImageView<'_, u8>) -> CorrMatchResult<OwnedImage> {
-    let width = src.width();
-    let height = src.height();
-    if width < 2 || height < 2 {
-        return Err(CorrMatchError::InvalidDimensions { width, height });
-    }
-
-    let dst_width = width / 2;
-    let dst_height = height / 2;
-    let dst_len = dst_width
-        .checked_mul(dst_height)
-        .ok_or(CorrMatchError::InvalidDimensions {
-            width: dst_width,
-            height: dst_height,
-        })?;
-    let mut dst = vec![0u8; dst_len];
-
-    for y in 0..dst_height {
-        let row0 = src.row(y * 2).ok_or_else(|| {
-            let needed = (y * 2 + 1)
-                .checked_mul(src.stride())
-                .and_then(|v| v.checked_add(src.width()))
-                .unwrap_or(usize::MAX);
-            CorrMatchError::BufferTooSmall {
-                needed,
-                got: src.as_slice().len(),
-            }
-        })?;
-        let row1 = src.row(y * 2 + 1).ok_or_else(|| {
-            let needed = (y * 2 + 2)
-                .checked_mul(src.stride())
-                .and_then(|v| v.checked_add(src.width()))
-                .unwrap_or(usize::MAX);
-            CorrMatchError::BufferTooSmall {
-                needed,
-                got: src.as_slice().len(),
-            }
-        })?;
-
-        for x in 0..dst_width {
-            let a = row0[2 * x];
-            let b = row0[2 * x + 1];
-            let c = row1[2 * x];
-            let d = row1[2 * x + 1];
-            let sum = u16::from(a) + u16::from(b) + u16::from(c) + u16::from(d);
-            dst[y * dst_width + x] = ((sum + 2) / 4) as u8;
-        }
-    }
-
-    OwnedImage::new(dst, dst_width, dst_height)
 }
 
 fn downsample_mask(mask: &[u8], width: usize, height: usize) -> CorrMatchResult<Vec<u8>> {
@@ -152,7 +102,7 @@ fn rotate_downsample_to_level(
     let (mut img, mut mask) = rotate_u8_bilinear_masked(base, angle, fill);
     for _ in 0..level {
         let view = img.view();
-        let next_img = downsample_u8(view)?;
+        let next_img = downsample_u8_2x2_box(view)?;
         let next_mask = downsample_mask(&mask, view.width(), view.height())?;
         img = next_img;
         mask = next_mask;
@@ -260,6 +210,13 @@ pub struct CompiledTemplateRot {
 impl CompiledTemplateRot {
     /// Compiles template assets for matching with rotation support.
     pub fn compile(tpl: &Template, cfg: CompileConfig) -> CorrMatchResult<Self> {
+        let _span = trace_span!(
+            "compile_template",
+            rotation = true,
+            max_levels = cfg.max_levels
+        )
+        .entered();
+
         let pyramid = ImagePyramid::build_u8(tpl.view(), cfg.max_levels)?;
         let mut levels = pyramid.into_levels();
         trim_degenerate_levels(&mut levels, 3)?;
@@ -297,29 +254,81 @@ impl CompiledTemplateRot {
                     context: "level",
                 })?;
             if let Some(bank) = banks.get_mut(coarsest_idx) {
-                for (idx, angle) in bank.grid.iter().enumerate() {
-                    let (rotated_img, mask) = rotate_downsample_to_level(
-                        base.view(),
-                        angle,
-                        cfg.fill_value,
-                        coarsest_idx,
-                    )?;
-                    debug_assert_eq!(rotated_img.width(), coarsest.width());
-                    debug_assert_eq!(rotated_img.height(), coarsest.height());
-                    let mask: Arc<[u8]> = Arc::from(mask);
-                    let zncc_plan = MaskedTemplatePlan::from_rotated_parts(
-                        rotated_img.view(),
-                        mask.clone(),
-                        angle,
-                    )?;
-                    let ssd_plan =
-                        MaskedSsdTemplatePlan::from_rotated_parts(rotated_img.view(), mask, angle)?;
-                    let rotated = RotatedTemplate {
-                        angle_deg: angle,
-                        zncc: zncc_plan,
-                        ssd: ssd_plan,
-                    };
-                    let _ = bank.slots[idx].set(rotated);
+                let _precompute_span =
+                    trace_span!("precompute_rotations", count = bank.grid.len()).entered();
+
+                #[cfg(feature = "rayon")]
+                {
+                    // Parallel precomputation of rotated templates
+                    let angles: Vec<(usize, f32)> = bank.grid.iter().enumerate().collect();
+                    let results: Vec<CorrMatchResult<(usize, RotatedTemplate)>> = angles
+                        .into_par_iter()
+                        .map(|(idx, angle)| {
+                            let (rotated_img, mask) = rotate_downsample_to_level(
+                                base.view(),
+                                angle,
+                                cfg.fill_value,
+                                coarsest_idx,
+                            )?;
+                            debug_assert_eq!(rotated_img.width(), coarsest.width());
+                            debug_assert_eq!(rotated_img.height(), coarsest.height());
+                            let mask: Arc<[u8]> = Arc::from(mask);
+                            let zncc_plan = MaskedTemplatePlan::from_rotated_parts(
+                                rotated_img.view(),
+                                mask.clone(),
+                                angle,
+                            )?;
+                            let ssd_plan = MaskedSsdTemplatePlan::from_rotated_parts(
+                                rotated_img.view(),
+                                mask,
+                                angle,
+                            )?;
+                            let rotated = RotatedTemplate {
+                                angle_deg: angle,
+                                zncc: zncc_plan,
+                                ssd: ssd_plan,
+                            };
+                            Ok((idx, rotated))
+                        })
+                        .collect();
+
+                    // Store results (checking for errors)
+                    for result in results {
+                        let (idx, rotated) = result?;
+                        let _ = bank.slots[idx].set(rotated);
+                    }
+                }
+
+                #[cfg(not(feature = "rayon"))]
+                {
+                    // Sequential precomputation
+                    for (idx, angle) in bank.grid.iter().enumerate() {
+                        let (rotated_img, mask) = rotate_downsample_to_level(
+                            base.view(),
+                            angle,
+                            cfg.fill_value,
+                            coarsest_idx,
+                        )?;
+                        debug_assert_eq!(rotated_img.width(), coarsest.width());
+                        debug_assert_eq!(rotated_img.height(), coarsest.height());
+                        let mask: Arc<[u8]> = Arc::from(mask);
+                        let zncc_plan = MaskedTemplatePlan::from_rotated_parts(
+                            rotated_img.view(),
+                            mask.clone(),
+                            angle,
+                        )?;
+                        let ssd_plan = MaskedSsdTemplatePlan::from_rotated_parts(
+                            rotated_img.view(),
+                            mask,
+                            angle,
+                        )?;
+                        let rotated = RotatedTemplate {
+                            angle_deg: angle,
+                            zncc: zncc_plan,
+                            ssd: ssd_plan,
+                        };
+                        let _ = bank.slots[idx].set(rotated);
+                    }
                 }
             }
         }
@@ -444,6 +453,13 @@ pub struct CompiledTemplateNoRot {
 impl CompiledTemplateNoRot {
     /// Compiles template assets without rotation support.
     pub fn compile(tpl: &Template, cfg: CompileConfigNoRot) -> CorrMatchResult<Self> {
+        let _span = trace_span!(
+            "compile_template",
+            rotation = false,
+            max_levels = cfg.max_levels
+        )
+        .entered();
+
         let pyramid = ImagePyramid::build_u8(tpl.view(), cfg.max_levels)?;
         let mut levels = pyramid.into_levels();
         trim_degenerate_levels(&mut levels, 1)?;
