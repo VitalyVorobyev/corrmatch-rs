@@ -6,7 +6,6 @@
 **/*.rs.bk
 Cargo.lock
 
-synthetic_cases
 *.pyc
 __pycache__/
 .pytest_cache/

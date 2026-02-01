@@ -1,0 +1,67 @@
+{
+  "background": {
+    "style": "flat",
+    "value": null
+  },
+  "case_id": "clean_translation",
+  "cli_config": {
+    "compile": {
+      "coarse_step_deg": 30.0,
+      "fill_value": 0,
+      "max_levels": 3,
+      "min_step_deg": 7.5,
+      "precompute_coarsest": true
+    },
+    "image_path": "image.png",
+    "match": {
+      "angle_half_range_steps": 1,
+      "beam_width": 6,
+      "max_image_levels": 3,
+      "metric": "zncc",
+      "min_score": -1e+38,
+      "min_var_i": 1e-08,
+      "nms_radius": 4,
+      "parallel": false,
+      "per_angle_topk": 3,
+      "roi_radius": 6,
+      "rotation": "disabled"
+    },
+    "template_path": "template.png",
+    "topk": 1
+  },
+  "effects": {
+    "blur_sigma": 0.0,
+    "global_bias": 0.0,
+    "global_gain": 1.0,
+    "noise_sigma": 0.0,
+    "occlusion_frac": 0.0,
+    "salt_pepper": 0.0,
+    "template_bias": 0.0,
+    "template_gain": 1.0
+  },
+  "family": "translation",
+  "image": {
+    "height": 192,
+    "width": 256
+  },
+  "instances": [
+    {
+      "angle_deg": 0.0,
+      "bias": 0.0,
+      "gain": 1.0,
+      "kind": "target",
+      "x": 87,
+      "y": 136
+    }
+  ],
+  "notes": "",
+  "occlusion": null,
+  "present": true,
+  "rotation_deg": 0.0,
+  "seed": 2648259674,
+  "template": {
+    "height": 48,
+    "pattern": "xor",
+    "width": 64
+  }
+}

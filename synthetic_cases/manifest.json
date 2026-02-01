@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "case_id": "clean_translation",
+      "cli_config": "clean_translation/cli_config.json",
+      "dir": "clean_translation",
+      "family": "translation",
+      "image": "clean_translation/image.png",
+      "meta": "clean_translation/meta.json",
+      "present": true,
+      "template": "clean_translation/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "clean_translation_large",
+      "cli_config": "clean_translation_large/cli_config.json",
+      "dir": "clean_translation_large",
+      "family": "translation",
+      "image": "clean_translation_large/image.png",
+      "meta": "clean_translation_large/meta.json",
+      "present": true,
+      "template": "clean_translation_large/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "rotation_coarse_30deg",
+      "cli_config": "rotation_coarse_30deg/cli_config.json",
+      "dir": "rotation_coarse_30deg",
+      "family": "rotation",
+      "image": "rotation_coarse_30deg/image.png",
+      "meta": "rotation_coarse_30deg/meta.json",
+      "present": true,
+      "template": "rotation_coarse_30deg/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "rotation_fine_22_5deg",
+      "cli_config": "rotation_fine_22_5deg/cli_config.json",
+      "dir": "rotation_fine_22_5deg",
+      "family": "rotation",
+      "image": "rotation_fine_22_5deg/image.png",
+      "meta": "rotation_fine_22_5deg/meta.json",
+      "present": true,
+      "template": "rotation_fine_22_5deg/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "rotation_wrap_172_5deg",
+      "cli_config": "rotation_wrap_172_5deg/cli_config.json",
+      "dir": "rotation_wrap_172_5deg",
+      "family": "rotation",
+      "image": "rotation_wrap_172_5deg/image.png",
+      "meta": "rotation_wrap_172_5deg/meta.json",
+      "present": true,
+      "template": "rotation_wrap_172_5deg/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "noise_gaussian",
+      "cli_config": "noise_gaussian/cli_config.json",
+      "dir": "noise_gaussian",
+      "family": "noise",
+      "image": "noise_gaussian/image.png",
+      "meta": "noise_gaussian/meta.json",
+      "present": true,
+      "template": "noise_gaussian/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "blur_sigma_1_5",
+      "cli_config": "blur_sigma_1_5/cli_config.json",
+      "dir": "blur_sigma_1_5",
+      "family": "blur",
+      "image": "blur_sigma_1_5/image.png",
+      "meta": "blur_sigma_1_5/meta.json",
+      "present": true,
+      "template": "blur_sigma_1_5/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "illumination_shift",
+      "cli_config": "illumination_shift/cli_config.json",
+      "dir": "illumination_shift",
+      "family": "illumination",
+      "image": "illumination_shift/image.png",
+      "meta": "illumination_shift/meta.json",
+      "present": true,
+      "template": "illumination_shift/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "occluded_25pct",
+      "cli_config": "occluded_25pct/cli_config.json",
+      "dir": "occluded_25pct",
+      "family": "occlusion",
+      "image": "occluded_25pct/image.png",
+      "meta": "occluded_25pct/meta.json",
+      "present": true,
+      "template": "occluded_25pct/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "distractors_topk",
+      "cli_config": "distractors_topk/cli_config.json",
+      "dir": "distractors_topk",
+      "family": "distractors",
+      "image": "distractors_topk/image.png",
+      "meta": "distractors_topk/meta.json",
+      "present": true,
+      "template": "distractors_topk/template.png",
+      "topk": 4
+    },
+    {
+      "case_id": "near_border",
+      "cli_config": "near_border/cli_config.json",
+      "dir": "near_border",
+      "family": "edge",
+      "image": "near_border/image.png",
+      "meta": "near_border/meta.json",
+      "present": true,
+      "template": "near_border/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "negative_no_match",
+      "cli_config": "negative_no_match/cli_config.json",
+      "dir": "negative_no_match",
+      "family": "negative",
+      "image": "negative_no_match/image.png",
+      "meta": "negative_no_match/meta.json",
+      "present": false,
+      "template": "negative_no_match/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "pyramid_stress",
+      "cli_config": "pyramid_stress/cli_config.json",
+      "dir": "pyramid_stress",
+      "family": "pyramid",
+      "image": "pyramid_stress/image.png",
+      "meta": "pyramid_stress/meta.json",
+      "present": true,
+      "template": "pyramid_stress/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "pyramid_stress_single_level",
+      "cli_config": "pyramid_stress_single_level/cli_config.json",
+      "dir": "pyramid_stress_single_level",
+      "family": "pyramid",
+      "image": "pyramid_stress_single_level/image.png",
+      "meta": "pyramid_stress_single_level/meta.json",
+      "present": true,
+      "template": "pyramid_stress_single_level/template.png",
+      "topk": 1
+    },
+    {
+      "case_id": "rotation_fine_single_level",
+      "cli_config": "rotation_fine_single_level/cli_config.json",
+      "dir": "rotation_fine_single_level",
+      "family": "rotation",
+      "image": "rotation_fine_single_level/image.png",
+      "meta": "rotation_fine_single_level/meta.json",
+      "present": true,
+      "template": "rotation_fine_single_level/template.png",
+      "topk": 1
+    }
+  ],
+  "cases_per_family": 1,
+  "seed": 1337,
+  "suite": "standard"
+}

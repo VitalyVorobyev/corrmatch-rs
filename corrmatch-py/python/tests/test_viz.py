@@ -45,3 +45,10 @@ def test_viz_smoke_no_show():
     )
     assert len(matches) == 3
 
+
+def test_viz_rotation_direction_cw():
+    import corrmatch.viz as viz  # noqa: E402
+
+    v = np.array([[1.0, 0.0]], dtype=np.float32)
+    out = viz._rot_cw(v, 90.0)
+    assert np.allclose(out, np.array([[0.0, 1.0]], dtype=np.float32), atol=1e-5)

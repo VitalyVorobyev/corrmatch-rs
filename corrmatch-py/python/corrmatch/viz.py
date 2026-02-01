@@ -68,7 +68,9 @@ def _rot_cw(points: np.ndarray, angle_deg: float) -> np.ndarray:
     theta = math.radians(angle_deg)
     cos_t = math.cos(theta)
     sin_t = math.sin(theta)
-    r = np.array([[cos_t, sin_t], [-sin_t, cos_t]], dtype=np.float32)
+    # In image coordinates (x right, y down), a positive clockwise rotation has
+    # the same matrix form as a standard CCW rotation in y-up coordinates.
+    r = np.array([[cos_t, -sin_t], [sin_t, cos_t]], dtype=np.float32)
     return points @ r.T
 
 
@@ -296,6 +298,16 @@ def show_matches(
     if title is not None:
         fig.suptitle(title)
 
+    # Expose axes handles for external tools (e.g. saving a single panel).
+    fig.corrmatch_axes = {  # type: ignore[attr-defined]
+        "image": ax_img,
+        "template": ax_tpl,
+        "template_rotated": ax_tpl_rot,
+        "patch": ax_patch,
+        "deskew": ax_deskew,
+        "diff": ax_diff,
+    }
+
     if show:
         plt.show()
 
@@ -350,6 +362,15 @@ def load_matches_json(path: str | Path) -> list[MatchRecord]:
     p = Path(path)
     payload = json.loads(p.read_text())
     topk = payload.get("topk", [])
+    if isinstance(topk, int):
+        raise ValueError(
+            "Expected corrmatch-cli output JSON with 'topk' as an array, but got a config-like JSON "
+            "(where 'topk' is an integer)."
+        )
+    if not isinstance(topk, list):
+        raise ValueError(
+            f"Expected corrmatch-cli output JSON with 'topk' as a list, got type={type(topk).__name__}"
+        )
     out: list[MatchRecord] = []
     for item in topk:
         out.append(
@@ -459,4 +480,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-
