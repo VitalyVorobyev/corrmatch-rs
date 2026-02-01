@@ -221,16 +221,20 @@ impl Matcher {
             return Ok(Vec::new());
         }
 
-        let seeds = self.match_candidates(image)?;
-        let limit = k.min(seeds.len());
-        let mut out = Vec::with_capacity(limit);
-        for cand in seeds.into_iter().take(limit) {
-            let refined = match self.cfg.rotation {
+        // For top-k queries, we may need to keep more coarse candidates than the
+        // default config provides, otherwise the early TopK buffer can be
+        // dominated by a single broad peak and miss other true instances.
+        let search_cfg = self.cfg_for_topk(k);
+        let seeds = self.match_candidates_with_cfg(image, &search_cfg)?;
+
+        let mut out = Vec::with_capacity(seeds.len());
+        for cand in seeds {
+            let refined = match search_cfg.rotation {
                 RotationMode::Enabled => {
-                    refine_final_match(image, &self.compiled, 0, cand, &self.cfg)
+                    refine_final_match(image, &self.compiled, 0, cand, &search_cfg)
                 }
                 RotationMode::Disabled => {
-                    refine_final_match_unmasked(image, &self.compiled, 0, cand, &self.cfg)
+                    refine_final_match_unmasked(image, &self.compiled, 0, cand, &search_cfg)
                 }
             };
             out.push(refined.unwrap_or(Match {
@@ -241,20 +245,57 @@ impl Matcher {
             }));
         }
 
+        out.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if out.len() > k {
+            out.truncate(k);
+        }
         Ok(out)
     }
 
     fn match_candidates(&self, image: ImageView<'_, u8>) -> CorrMatchResult<Vec<Candidate>> {
+        self.match_candidates_with_cfg(image, &self.cfg)
+    }
+
+    fn cfg_for_topk(&self, k: usize) -> MatchConfig {
+        if k <= 1 {
+            return self.cfg.clone();
+        }
+
+        let mut cfg = self.cfg.clone();
+        cfg.beam_width = cfg.beam_width.max(k);
+
+        // Oversample top-k per angle so that after NMS we still retain multiple
+        // distinct peaks. Rotation-disabled uses a single angle, so we can be
+        // more aggressive without blowing up work across angles.
+        let oversample = match cfg.rotation {
+            RotationMode::Disabled => 8,
+            RotationMode::Enabled => 4,
+        };
+        cfg.per_angle_topk = cfg
+            .per_angle_topk
+            .max(cfg.beam_width.saturating_mul(oversample));
+        cfg
+    }
+
+    fn match_candidates_with_cfg(
+        &self,
+        image: ImageView<'_, u8>,
+        cfg: &MatchConfig,
+    ) -> CorrMatchResult<Vec<Candidate>> {
         if matches!(self.compiled, CompiledTemplate::Unrotated(_))
-            && self.cfg.rotation == RotationMode::Enabled
+            && cfg.rotation == RotationMode::Enabled
         {
             return Err(CorrMatchError::RotationUnavailable {
                 reason: "rotation enabled but template compiled without angle banks",
             });
         }
 
-        let use_parallel = self.cfg.use_parallel();
-        let pyramid = ImagePyramid::build_u8(image, self.cfg.max_image_levels)?;
+        let use_parallel = cfg.use_parallel();
+        let pyramid = ImagePyramid::build_u8(image, cfg.max_image_levels)?;
         let num_levels = pyramid.levels().len().min(self.compiled.num_levels());
 
         let _span = trace_span!(
@@ -270,9 +311,8 @@ impl Matcher {
             });
         }
 
-        let use_integral = !use_parallel
-            && self.cfg.rotation == RotationMode::Disabled
-            && self.cfg.metric == Metric::Zncc;
+        let use_integral =
+            !use_parallel && cfg.rotation == RotationMode::Disabled && cfg.metric == Metric::Zncc;
         let integrals = if use_integral {
             let mut out = Vec::with_capacity(num_levels);
             for level in 0..num_levels {
@@ -298,19 +338,19 @@ impl Matcher {
                 len: pyramid.levels().len(),
                 context: "image level",
             })?;
-        let mut seeds = match self.cfg.rotation {
+        let mut seeds = match cfg.rotation {
             RotationMode::Enabled => {
                 if use_parallel {
                     #[cfg(feature = "rayon")]
                     {
-                        coarse_search_level_par(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                        coarse_search_level_par(coarse_view, &self.compiled, coarsest, cfg)?
                     }
                     #[cfg(not(feature = "rayon"))]
                     {
-                        coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                        coarse_search_level(coarse_view, &self.compiled, coarsest, cfg)?
                     }
                 } else {
-                    coarse_search_level(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                    coarse_search_level(coarse_view, &self.compiled, coarsest, cfg)?
                 }
             }
             RotationMode::Disabled => {
@@ -321,17 +361,12 @@ impl Matcher {
                             coarse_view,
                             &self.compiled,
                             coarsest,
-                            &self.cfg,
+                            cfg,
                         )?
                     }
                     #[cfg(not(feature = "rayon"))]
                     {
-                        coarse_search_level_unmasked(
-                            coarse_view,
-                            &self.compiled,
-                            coarsest,
-                            &self.cfg,
-                        )?
+                        coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, cfg)?
                     }
                 } else if use_integral {
                     let integrals = integrals
@@ -341,11 +376,11 @@ impl Matcher {
                         coarse_view,
                         &self.compiled,
                         coarsest,
-                        &self.cfg,
+                        cfg,
                         &integrals[coarsest],
                     )?
                 } else {
-                    coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, &self.cfg)?
+                    coarse_search_level_unmasked(coarse_view, &self.compiled, coarsest, cfg)?
                 }
             }
         };
@@ -363,7 +398,7 @@ impl Matcher {
                     len: pyramid.levels().len(),
                     context: "image level",
                 })?;
-            seeds = match self.cfg.rotation {
+            seeds = match cfg.rotation {
                 RotationMode::Enabled => {
                     if use_parallel {
                         #[cfg(feature = "rayon")]
@@ -373,7 +408,7 @@ impl Matcher {
                                 &self.compiled,
                                 level,
                                 &seeds,
-                                &self.cfg,
+                                cfg,
                             )?
                         }
                         #[cfg(not(feature = "rayon"))]
@@ -384,18 +419,12 @@ impl Matcher {
                                 &self.compiled,
                                 level,
                                 &seeds,
-                                &self.cfg,
+                                cfg,
                             )?
                         }
                     } else {
                         // Use batch processing for cache locality
-                        refine_to_finer_level_batch(
-                            level_view,
-                            &self.compiled,
-                            level,
-                            &seeds,
-                            &self.cfg,
-                        )?
+                        refine_to_finer_level_batch(level_view, &self.compiled, level, &seeds, cfg)?
                     }
                 }
                 RotationMode::Disabled => {
@@ -407,7 +436,7 @@ impl Matcher {
                                 &self.compiled,
                                 level,
                                 &seeds,
-                                &self.cfg,
+                                cfg,
                             )?
                         }
                         #[cfg(not(feature = "rayon"))]
@@ -417,7 +446,7 @@ impl Matcher {
                                 &self.compiled,
                                 level,
                                 &seeds,
-                                &self.cfg,
+                                cfg,
                             )?
                         }
                     } else if use_integral {
@@ -429,7 +458,7 @@ impl Matcher {
                             &self.compiled,
                             level,
                             &seeds,
-                            &self.cfg,
+                            cfg,
                             &integrals[level],
                         )?
                     } else {
@@ -438,7 +467,7 @@ impl Matcher {
                             &self.compiled,
                             level,
                             &seeds,
-                            &self.cfg,
+                            cfg,
                         )?
                     }
                 }
