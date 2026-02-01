@@ -22,6 +22,12 @@ Homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
 Repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
 Documentation = "https://docs.rs/corrmatch"
 
+[project.optional-dependencies]
+viz = ["matplotlib>=3.7", "Pillow>=10.0"]
+
+[project.scripts]
+corrmatch-viz = "corrmatch.viz:main"
+
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"

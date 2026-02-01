@@ -35,6 +35,7 @@ from ._corrmatch import (
     CompiledTemplate,
     Matcher,
     match_template,
+    rotate_u8_bilinear_masked,
     __version__,
 )
 
@@ -46,5 +47,6 @@ __all__ = [
     "CompiledTemplate",
     "Matcher",
     "match_template",
+    "rotate_u8_bilinear_masked",
     "__version__",
 ]

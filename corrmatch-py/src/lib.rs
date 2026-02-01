@@ -2,9 +2,12 @@
 //!
 //! This module exposes the high-level corrmatch API to Python via PyO3.
 
-use numpy::{PyReadonlyArray2, PyUntypedArrayMethods};
+use ndarray::Array2;
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+
+type PyArray2U8 = Py<PyArray2<u8>>;
 
 use corrmatch::{
     CompileConfig as RustCompileConfig, CompileConfigNoRot as RustCompileConfigNoRot,
@@ -97,6 +100,36 @@ impl CompileConfig {
     /// Validate the configuration.
     fn validate(&self) -> PyResult<()> {
         self.inner.validate().map_err(to_py_err)
+    }
+
+    /// Maximum pyramid levels to build.
+    #[getter]
+    fn max_levels(&self) -> usize {
+        self.inner.max_levels
+    }
+
+    /// Coarse rotation step in degrees at level 0.
+    #[getter]
+    fn coarse_step_deg(&self) -> f32 {
+        self.inner.coarse_step_deg
+    }
+
+    /// Minimum rotation step in degrees across levels.
+    #[getter]
+    fn min_step_deg(&self) -> f32 {
+        self.inner.min_step_deg
+    }
+
+    /// Fill value used for out-of-bounds rotations.
+    #[getter]
+    fn fill_value(&self) -> u8 {
+        self.inner.fill_value
+    }
+
+    /// Precompute all rotations for the coarsest level.
+    #[getter]
+    fn precompute_coarsest(&self) -> bool {
+        self.inner.precompute_coarsest
     }
 
     fn __repr__(&self) -> String {
@@ -196,6 +229,78 @@ impl MatchConfig {
     /// Validate the configuration.
     fn validate(&self) -> PyResult<()> {
         self.inner.validate().map_err(to_py_err)
+    }
+
+    /// Matching metric ("zncc" or "ssd").
+    #[getter]
+    fn metric(&self) -> String {
+        match self.inner.metric {
+            RustMetric::Zncc => "zncc".to_string(),
+            RustMetric::Ssd => "ssd".to_string(),
+        }
+    }
+
+    /// Rotation mode ("enabled" or "disabled").
+    #[getter]
+    fn rotation(&self) -> String {
+        match self.inner.rotation {
+            RustRotationMode::Enabled => "enabled".to_string(),
+            RustRotationMode::Disabled => "disabled".to_string(),
+        }
+    }
+
+    /// Enable parallel execution.
+    #[getter]
+    fn parallel(&self) -> bool {
+        self.inner.parallel
+    }
+
+    /// Maximum image pyramid levels.
+    #[getter]
+    fn max_image_levels(&self) -> usize {
+        self.inner.max_image_levels
+    }
+
+    /// Candidates kept per level.
+    #[getter]
+    fn beam_width(&self) -> usize {
+        self.inner.beam_width
+    }
+
+    /// Top peaks per angle at the coarsest level.
+    #[getter]
+    fn per_angle_topk(&self) -> usize {
+        self.inner.per_angle_topk
+    }
+
+    /// Non-maximum suppression radius.
+    #[getter]
+    fn nms_radius(&self) -> usize {
+        self.inner.nms_radius
+    }
+
+    /// Refinement ROI radius.
+    #[getter]
+    fn roi_radius(&self) -> usize {
+        self.inner.roi_radius
+    }
+
+    /// Angle search half-range in steps.
+    #[getter]
+    fn angle_half_range_steps(&self) -> usize {
+        self.inner.angle_half_range_steps
+    }
+
+    /// Minimum image patch variance for ZNCC.
+    #[getter]
+    fn min_var_i(&self) -> f32 {
+        self.inner.min_var_i
+    }
+
+    /// Minimum score threshold.
+    #[getter]
+    fn min_score(&self) -> f32 {
+        self.inner.min_score
     }
 
     fn __repr__(&self) -> String {
@@ -487,6 +592,48 @@ fn match_template(
     Ok(result.into())
 }
 
+/// Rotate a grayscale image using bilinear sampling and return a validity mask.
+///
+/// Rotation is performed about the image center with the same conventions as the
+/// corrmatch Rust implementation. Positive angles rotate **clockwise** in image
+/// coordinates (x right, y down).
+///
+/// Args:
+///     image: 2D uint8 numpy array (height x width)
+///     angle_deg: Rotation angle in degrees (clockwise)
+///     fill_value: Fill value for out-of-bounds sampling (default: 0)
+///
+/// Returns:
+///     Tuple `(rotated, mask)` where `rotated` is a 2D uint8 array and `mask` is
+///     a 2D uint8 array with values 0/1 indicating valid bilinear sampling
+///     footprints.
+#[pyfunction]
+#[pyo3(signature = (image, angle_deg, fill_value = 0))]
+fn rotate_u8_bilinear_masked(
+    py: Python<'_>,
+    image: PyReadonlyArray2<'_, u8>,
+    angle_deg: f32,
+    fill_value: u8,
+) -> PyResult<(PyArray2U8, PyArray2U8)> {
+    let shape = image.shape();
+    let height = shape[0];
+    let width = shape[1];
+    let data = image.as_slice()?;
+
+    let view = ImageView::from_slice(data, width, height).map_err(to_py_err)?;
+    let (rotated, mask) =
+        corrmatch::lowlevel::rotate_u8_bilinear_masked(view, angle_deg, fill_value);
+
+    let rotated = Array2::from_shape_vec((height, width), rotated.data().to_vec())
+        .map_err(|_| PyValueError::new_err("failed to construct rotated image array"))?;
+    let mask = Array2::from_shape_vec((height, width), mask)
+        .map_err(|_| PyValueError::new_err("failed to construct rotation mask array"))?;
+
+    let rotated: PyArray2U8 = rotated.into_pyarray(py).into();
+    let mask: PyArray2U8 = mask.into_pyarray(py).into();
+    Ok((rotated, mask))
+}
+
 /// Python module for corrmatch template matching.
 #[pymodule]
 fn _corrmatch(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -497,6 +644,7 @@ fn _corrmatch(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CompiledTemplate>()?;
     m.add_class::<Matcher>()?;
     m.add_function(wrap_pyfunction!(match_template, m)?)?;
+    m.add_function(wrap_pyfunction!(rotate_u8_bilinear_masked, m)?)?;
 
     // Add version
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
