@@ -88,7 +88,7 @@ at `corrmatch-cli/config.example.json`.
 
 ## Feature flags
 - `rayon`: parallel search execution.
-- `simd`: SIMD-accelerated kernels (planned).
+- `simd`: SIMD-accelerated kernels (currently: unmasked translation-only path).
 - `image-io`: file I/O helpers via the `image` crate.
 
 ## Python bindings (corrmatch-py)
@@ -115,6 +115,11 @@ let template = load_gray_image("template.png")?;
 - `cargo test`
 - `cargo test --features rayon`
 - `cargo bench`
+
+## Validation and performance tracking
+- Synthetic validation suite (ground truth cases): `docs/VALIDATION.md`
+- Criterion benchmarks and latest numbers: `performance.md`
+- Release checklist (crates.io + PyPI): `docs/RELEASE_CHECKLIST.md`
 
 ## Status
 Core matcher types, the JSON-driven CLI, and Python bindings are implemented.

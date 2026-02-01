@@ -1,14 +1,25 @@
 # CHANGELOG
 
 ## Unreleased
-- Add core error types and result alias for fallible APIs.
-- Add `ImageView`, `ImagePyramid`, `Template`, and `TemplatePlan` foundations.
-- Add unit tests for image views, pyramid downsampling, and template stats.
-- Add `AngleGrid` and `CompiledTemplate` with lazy rotation caching.
-- Add deterministic bilinear rotation for `u8` templates and math helpers.
-- Add tests for angle grids, rotations, and cache behavior.
-- Add masked rotation plans for ZNCC and scalar masked scan with Top-K support.
-- Add spatial NMS helper and masked ZNCC correctness tests.
-- Add coarse-to-fine matcher with joint angle search and ROI refinement.
-- Add scan helpers for full-range and ROI masked ZNCC evaluation.
-- Add end-to-end pipeline tests and angle-step scheduling coverage.
+- Improve docs and examples.
+- Continue performance hardening of rotation-enabled path.
+
+## 0.1.0 - 2026-01-31
+
+### Added
+- Core matcher API: `Template`, `CompiledTemplate`, `Matcher`, `MatchConfig`.
+- Metrics: ZNCC and SSD (SSD scores reported as negative SSE; higher is better).
+- Coarse-to-fine pyramid search with optional rotation search on a discrete angle grid.
+- Candidate pruning: per-angle Top‑K + 2D NMS + deterministic ordering.
+- Refinement across pyramid levels plus final quadratic fits (subpixel/subangle).
+- Deterministic parallel execution (feature `rayon`, opt-in via `MatchConfig.parallel`).
+- Optional SIMD kernels for unmasked translation-only path (feature `simd`).
+- Optional image I/O helpers (feature `image-io`).
+- JSON-driven CLI (`corrmatch-cli`) with tracing support.
+- Python bindings via PyO3 + maturin (`corrmatch-py`) with numpy-first API.
+- Synthetic validation suite (Rust + Python).
+- Criterion benchmark suite (`benches/corrmatch.rs`).
+
+### Fixed
+- Rotation-enabled matching correctness for large templates by removing `u16` index truncation in
+  masked template plans.

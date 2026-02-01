@@ -39,7 +39,7 @@
 //!
 //! # Feature flags
 //! - `rayon`: parallel search execution.
-//! - `simd`: SIMD-accelerated kernels (planned).
+//! - `simd`: SIMD-accelerated kernels (currently: unmasked translation-only path).
 //! - `image-io`: file I/O helpers via the `image` crate.
 //!
 //! # Low-level API

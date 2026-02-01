@@ -1,11 +1,29 @@
 [package]
 name = "corrmatch"
 version = "0.1.0"
+description = "CPU-first template matching with ZNCC/SSD and coarse-to-fine pyramid search"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+documentation = "https://docs.rs/corrmatch"
+readme = "README.md"
 categories = ["algorithms", "multimedia::images", "science"]
 keywords = ["template-matching", "image-processing", "zncc", "pyramid", "rotation"]
+rust-version = "1.70"
+include = [
+    "src/**",
+    "tests/**",
+    "benches/**",
+    "docs/**",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/ROADMAP.md",
+    "/performance.md",
+    "/LICENSE",
+    "/rustfmt.toml",
+    "/Cargo.toml",
+]
 
 [dependencies]
 thiserror = "1"
@@ -34,3 +52,7 @@ members = ["corrmatch-cli", "corrmatch-py"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+
+[[bench]]
+name = "corrmatch"
+harness = false

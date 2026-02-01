@@ -1,49 +1,56 @@
-1. w/o features:
-compile_template{rotation=true max_levels=3}:precompute_rotations{count=12}: close time.busy=10.7ms time.idle=4.08µs
-compile_template{rotation=true max_levels=3}: close time.busy=11.3ms time.idle=6.71µs
-coarse_to_fine{levels=3 parallel=false}:coarse_search{level=2 angles=12}: close time.busy=128ms time.idle=3.75µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=1 candidates=7}: close time.busy=88.1ms time.idle=4.33µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=0 candidates=8}: close time.busy=369ms time.idle=5.33µs
-coarse_to_fine{levels=3 parallel=false}: close time.busy=585ms time.idle=2.29µs
-final_refinement: close time.busy=536µs time.idle=3.12µs
+# Performance
 
-2. rayon
-compile_template{rotation=true max_levels=3}:precompute_rotations{count=12}: close time.busy=3.03ms time.idle=5.92µs
-compile_template{rotation=true max_levels=3}: close time.busy=3.78ms time.idle=7.04µs
-coarse_to_fine{levels=3 parallel=true}:coarse_search{level=2 angles=12 parallel=true}: close time.busy=21.9ms time.idle=4.08µs
-coarse_to_fine{levels=3 parallel=true}:refine_level{level=1 candidates=7 parallel=true}: close time.busy=17.8ms time.idle=4.38µs
-coarse_to_fine{levels=3 parallel=true}:refine_level{level=0 candidates=8 parallel=true}: close time.busy=53.8ms time.idle=4.46µs
-coarse_to_fine{levels=3 parallel=true}: close time.busy=93.6ms time.idle=2.92µs
-final_refinement: close time.busy=527µs time.idle=2.54µs
+CorrMatch has two sources of performance data:
 
-3. no rotation, no features:
-compile_template{rotation=false max_levels=3}: close time.busy=426µs time.idle=9.12µs
-coarse_to_fine{levels=3 parallel=false}:coarse_search{level=2 angles=1}: close time.busy=13.9ms time.idle=5.92µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=1 candidates=1}: close time.busy=4.92ms time.idle=3.12µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=0 candidates=2}: close time.busy=31.6ms time.idle=4.17µs
-coarse_to_fine{levels=3 parallel=false}: close time.busy=57.0ms time.idle=3.00µs
-final_refinement: close time.busy=491µs time.idle=2.63µs
+1) Criterion microbenchmarks in `benches/corrmatch.rs` (recommended for tracking).
+2) Tracing-based pipeline timings (useful during profiling sessions).
 
-3. no rotation, simd feature:
-compile_template{rotation=false max_levels=3}: close time.busy=413µs time.idle=7.04µs
-coarse_to_fine{levels=3 parallel=false}:coarse_search{level=2 angles=1}: close time.busy=19.7ms time.idle=4.25µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=1 candidates=1}: close time.busy=7.81ms time.idle=3.88µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=0 candidates=2}: close time.busy=51.5ms time.idle=4.42µs
-coarse_to_fine{levels=3 parallel=false}: close time.busy=79.1ms time.idle=2.92µs
-final_refinement: close time.busy=736µs time.idle=2.17µs
+## Running Criterion benches
 
-4. no rotation, rayon:
-compile_template{rotation=false max_levels=3}: close time.busy=506µs time.idle=7.67µs
-coarse_to_fine{levels=3 parallel=false}:coarse_search{level=2 angles=1}: close time.busy=15.7ms time.idle=5.25µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=1 candidates=1}: close time.busy=5.56ms time.idle=3.50µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=0 candidates=2}: close time.busy=35.5ms time.idle=3.33µs
-coarse_to_fine{levels=3 parallel=false}: close time.busy=56.9ms time.idle=2.83µs
-final_refinement: close time.busy=475µs time.idle=2.04µs
+```bash
+cargo bench -p corrmatch --bench corrmatch -- --noplot --sample-size 30 --warm-up-time 1 --measurement-time 2
+cargo bench -p corrmatch --bench corrmatch --features rayon -- --noplot --sample-size 30 --warm-up-time 1 --measurement-time 2
+cargo bench -p corrmatch --bench corrmatch --features simd -- --noplot --sample-size 30 --warm-up-time 1 --measurement-time 2
+cargo bench -p corrmatch --bench corrmatch --features "rayon simd" -- --noplot --sample-size 30 --warm-up-time 1 --measurement-time 2
+```
 
-5. no rotation, rayon and simd:
-compile_template{rotation=false max_levels=3}: close time.busy=453µs time.idle=7.92µs
-coarse_to_fine{levels=3 parallel=false}:coarse_search{level=2 angles=1}: close time.busy=19.5ms time.idle=5.12µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=1 candidates=1}: close time.busy=8.04ms time.idle=4.08µs
-coarse_to_fine{levels=3 parallel=false}:refine_level{level=0 candidates=2}: close time.busy=52.0ms time.idle=3.88µs
-coarse_to_fine{levels=3 parallel=false}: close time.busy=79.7ms time.idle=3.04µs
-final_refinement: close time.busy=741µs time.idle=2.29µs
+## Latest recorded Criterion results (2026-01-31)
+
+Environment:
+- OS: Darwin 25.2.0 (arm64)
+- CPU: Apple M4 Pro
+- Rust: rustc 1.91.0, cargo 1.91.0
+
+All times are Criterion 95% CI `[low mid high]`:
+
+### Default features (none)
+
+- zncc_unmasked_rotation_off: `[10.250 ms 10.313 ms 10.377 ms]`
+- ssd_unmasked_rotation_off: `[25.666 ms 25.792 ms 25.933 ms]`
+- zncc_masked_rotation_on: `[97.132 ms 97.638 ms 98.060 ms]`
+- ssd_masked_rotation_on: `[22.031 ms 22.140 ms 22.232 ms]`
+
+### `--features rayon`
+
+- zncc_unmasked_rotation_off: `[10.140 ms 10.175 ms 10.210 ms]`
+- ssd_unmasked_rotation_off: `[25.626 ms 25.713 ms 25.792 ms]`
+- zncc_unmasked_rotation_off_parallel: `[5.5567 ms 5.5953 ms 5.6384 ms]`
+- zncc_masked_rotation_on: `[98.118 ms 98.567 ms 98.967 ms]`
+- ssd_masked_rotation_on: `[22.266 ms 22.302 ms 22.337 ms]`
+- zncc_masked_rotation_on_parallel: `[20.017 ms 20.230 ms 20.562 ms]`
+
+### `--features simd`
+
+- zncc_unmasked_rotation_off: `[6.6193 ms 6.6647 ms 6.6957 ms]`
+- ssd_unmasked_rotation_off: `[16.344 ms 16.431 ms 16.510 ms]`
+- zncc_masked_rotation_on: `[98.821 ms 99.335 ms 99.772 ms]`
+- ssd_masked_rotation_on: `[22.268 ms 22.398 ms 22.535 ms]`
+
+### `--features "rayon simd"`
+
+- zncc_unmasked_rotation_off: `[6.5958 ms 6.6248 ms 6.6497 ms]`
+- ssd_unmasked_rotation_off: `[16.281 ms 16.368 ms 16.445 ms]`
+- zncc_unmasked_rotation_off_parallel: `[3.7322 ms 3.7527 ms 3.7748 ms]`
+- zncc_masked_rotation_on: `[98.715 ms 99.098 ms 99.550 ms]`
+- ssd_masked_rotation_on: `[22.326 ms 22.429 ms 22.546 ms]`
+- zncc_masked_rotation_on_parallel: `[19.914 ms 20.031 ms 20.202 ms]`

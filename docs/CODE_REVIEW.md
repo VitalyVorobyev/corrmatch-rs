@@ -6,6 +6,22 @@
 
 ---
 
+## Status update (2026-01-31)
+
+This document is kept as a historical review. Several items below have since been fixed.
+
+Addressed since 2026-01-11:
+- Rotation casting UB: fixed by clamping source coordinates before casting.
+- Config validation: `CompileConfig::validate()` and `MatchConfig::validate()` are implemented and used.
+- Parallel flag behavior: requesting parallel without `rayon` now errors.
+- Masked rotation plans: fixed a correctness bug for large templates by removing `u16` index truncation.
+- Benches: Criterion bench is wired via `harness = false`.
+
+Still relevant / follow-ups:
+- `TemplatePlan::t_prime()` vs `TemplatePlan::zero_mean()` alias is still redundant (API polish).
+- Consolidate repeated numeric thresholds (e.g., `1e-8`) into constants where it helps readability.
+- AngleGrid construction can be simplified to avoid float-accumulation edge cases.
+
 ## Executive Summary
 
 The corrmatch-rs codebase demonstrates excellent engineering practices:

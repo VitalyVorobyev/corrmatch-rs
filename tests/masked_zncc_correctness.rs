@@ -27,9 +27,7 @@ fn brute_force_best(image: ImageView<'_, u8>, tpl: &MaskedTemplatePlan) -> (usiz
             let mut sum_i2 = 0.0f64;
 
             for (i, coord) in valid_coords.iter().enumerate() {
-                let row = image
-                    .row(y + coord.y as usize)
-                    .expect("row in bounds");
+                let row = image.row(y + coord.y as usize).expect("row in bounds");
                 let value = row[x + coord.x as usize] as f64;
                 dot += valid_t_prime[i] as f64 * value;
                 sum_i += value;

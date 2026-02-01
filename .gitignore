@@ -9,3 +9,12 @@ Cargo.lock
 synthetic_cases
 *.pyc
 __pycache__/
+.pytest_cache/
+
+# Python wheels / local builds
+dist/
+*.whl
+
+# Local PyO3 build artifacts (should be built via maturin)
+corrmatch-py/python/corrmatch/_corrmatch*.so
+corrmatch-py/python/corrmatch/_corrmatch*.pyd
