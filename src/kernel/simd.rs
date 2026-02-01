@@ -6,7 +6,7 @@
 
 use crate::candidate::topk::{Peak, TopK};
 use crate::image::integral::IntegralImages;
-use crate::kernel::{Kernel, ScanParams};
+use crate::kernel::{Kernel, ScanParams, ScanRoi};
 use crate::template::{SsdTemplatePlan, TemplatePlan};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
@@ -158,15 +158,11 @@ impl ZnccUnmaskedSimd {
         hsum(dot_vec) + dot_s
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn scan_range(
         image: ImageView<'_, u8>,
         tpl: &TemplatePlan,
         angle_idx: usize,
-        x0: usize,
-        y0: usize,
-        mut x1: usize,
-        mut y1: usize,
+        roi: ScanRoi,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
         if params.topk == 0 {
@@ -191,14 +187,10 @@ impl ZnccUnmaskedSimd {
 
         let max_x = img_width - tpl_width;
         let max_y = img_height - tpl_height;
-        if x0 > max_x || y0 > max_y {
-            return Ok(Vec::new());
-        }
-        x1 = x1.min(max_x);
-        y1 = y1.min(max_y);
-        if x0 > x1 || y0 > y1 {
-            return Ok(Vec::new());
-        }
+        let roi = match roi.clamp_inclusive(max_x, max_y) {
+            Some(roi) => roi,
+            None => return Ok(Vec::new()),
+        };
 
         let var_t = tpl.var_t();
         if var_t <= 1e-8 {
@@ -206,8 +198,8 @@ impl ZnccUnmaskedSimd {
         }
 
         let mut topk_buf = TopK::new(params.topk);
-        for y in y0..=y1 {
-            for x in x0..=x1 {
+        for y in roi.y0..=roi.y1 {
+            for x in roi.x0..=roi.x1 {
                 let score = Self::score_at_simd(image, tpl, x, y, params.min_var_i);
                 if score.is_finite() && score >= params.min_score {
                     topk_buf.push(Peak {
@@ -223,15 +215,11 @@ impl ZnccUnmaskedSimd {
         Ok(topk_buf.into_sorted_desc())
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn scan_range_integral(
         image: ImageView<'_, u8>,
         tpl: &TemplatePlan,
         angle_idx: usize,
-        x0: usize,
-        y0: usize,
-        mut x1: usize,
-        mut y1: usize,
+        roi: ScanRoi,
         params: ScanParams,
         integrals: &IntegralImages,
     ) -> CorrMatchResult<Vec<Peak>> {
@@ -260,14 +248,10 @@ impl ZnccUnmaskedSimd {
 
         let max_x = img_width - tpl_width;
         let max_y = img_height - tpl_height;
-        if x0 > max_x || y0 > max_y {
-            return Ok(Vec::new());
-        }
-        x1 = x1.min(max_x);
-        y1 = y1.min(max_y);
-        if x0 > x1 || y0 > y1 {
-            return Ok(Vec::new());
-        }
+        let roi = match roi.clamp_inclusive(max_x, max_y) {
+            Some(roi) => roi,
+            None => return Ok(Vec::new()),
+        };
 
         let var_t = tpl.var_t();
         if var_t <= 1e-8 {
@@ -277,8 +261,8 @@ impl ZnccUnmaskedSimd {
         let n = (tpl_width * tpl_height) as f32;
 
         let mut topk_buf = TopK::new(params.topk);
-        for y in y0..=y1 {
-            for x in x0..=x1 {
+        for y in roi.y0..=roi.y1 {
+            for x in roi.x0..=roi.x1 {
                 let sum_i = integrals.sum_rect(x, y, tpl_width, tpl_height);
                 let sum_i2 = integrals.sumsq_rect(x, y, tpl_width, tpl_height);
                 let var_i = sum_i2 - (sum_i * sum_i) / n;
@@ -315,29 +299,22 @@ impl ZnccUnmaskedSimd {
             image,
             tpl,
             angle_idx,
-            0,
-            0,
-            usize::MAX,
-            usize::MAX,
+            ScanRoi::new(0, 0, usize::MAX, usize::MAX),
             params,
             integrals,
         )
     }
 
     /// Scans an ROI using integral-image variance pruning.
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn scan_roi_integral(
         image: ImageView<'_, u8>,
         tpl: &TemplatePlan,
         angle_idx: usize,
-        x0: usize,
-        y0: usize,
-        x1: usize,
-        y1: usize,
+        roi: ScanRoi,
         params: ScanParams,
         integrals: &IntegralImages,
     ) -> CorrMatchResult<Vec<Peak>> {
-        Self::scan_range_integral(image, tpl, angle_idx, x0, y0, x1, y1, params, integrals)
+        Self::scan_range_integral(image, tpl, angle_idx, roi, params, integrals)
     }
 }
 
@@ -372,7 +349,13 @@ impl Kernel for ZnccUnmaskedSimd {
         angle_idx: usize,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
-        Self::scan_range(image, plan, angle_idx, 0, 0, usize::MAX, usize::MAX, params)
+        Self::scan_range(
+            image,
+            plan,
+            angle_idx,
+            ScanRoi::new(0, 0, usize::MAX, usize::MAX),
+            params,
+        )
     }
 
     fn scan_roi(
@@ -385,7 +368,7 @@ impl Kernel for ZnccUnmaskedSimd {
         y1: usize,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
-        Self::scan_range(image, plan, angle_idx, x0, y0, x1, y1, params)
+        Self::scan_range(image, plan, angle_idx, ScanRoi::new(x0, y0, x1, y1), params)
     }
 }
 
@@ -438,15 +421,11 @@ impl SsdUnmaskedSimd {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn scan_range(
         image: ImageView<'_, u8>,
         tpl: &SsdTemplatePlan,
         angle_idx: usize,
-        x0: usize,
-        y0: usize,
-        mut x1: usize,
-        mut y1: usize,
+        roi: ScanRoi,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
         if params.topk == 0 {
@@ -471,18 +450,14 @@ impl SsdUnmaskedSimd {
 
         let max_x = img_width - tpl_width;
         let max_y = img_height - tpl_height;
-        if x0 > max_x || y0 > max_y {
-            return Ok(Vec::new());
-        }
-        x1 = x1.min(max_x);
-        y1 = y1.min(max_y);
-        if x0 > x1 || y0 > y1 {
-            return Ok(Vec::new());
-        }
+        let roi = match roi.clamp_inclusive(max_x, max_y) {
+            Some(roi) => roi,
+            None => return Ok(Vec::new()),
+        };
 
         let mut topk_buf = TopK::new(params.topk);
-        for y in y0..=y1 {
-            for x in x0..=x1 {
+        for y in roi.y0..=roi.y1 {
+            for x in roi.x0..=roi.x1 {
                 let score = Self::score_at_simd(image, tpl, x, y);
                 if score.is_finite() && score >= params.min_score {
                     topk_buf.push(Peak {
@@ -530,7 +505,13 @@ impl Kernel for SsdUnmaskedSimd {
         angle_idx: usize,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
-        Self::scan_range(image, plan, angle_idx, 0, 0, usize::MAX, usize::MAX, params)
+        Self::scan_range(
+            image,
+            plan,
+            angle_idx,
+            ScanRoi::new(0, 0, usize::MAX, usize::MAX),
+            params,
+        )
     }
 
     fn scan_roi(
@@ -543,6 +524,6 @@ impl Kernel for SsdUnmaskedSimd {
         y1: usize,
         params: ScanParams,
     ) -> CorrMatchResult<Vec<Peak>> {
-        Self::scan_range(image, plan, angle_idx, x0, y0, x1, y1, params)
+        Self::scan_range(image, plan, angle_idx, ScanRoi::new(x0, y0, x1, y1), params)
     }
 }

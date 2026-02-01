@@ -12,7 +12,6 @@ use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
 use crate::kernel::{Kernel, ScanParams};
 use crate::search::refine::Candidate;
 use crate::search::{MatchConfig, Metric};
-use crate::trace::{trace_event, trace_span};
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
 #[cfg(feature = "rayon")]

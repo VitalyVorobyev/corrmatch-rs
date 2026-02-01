@@ -45,9 +45,6 @@ macro_rules! trace_event {
     ($name:expr) => {};
 }
 
-pub(crate) use trace_event;
-pub(crate) use trace_span;
-
 /// A no-op span guard used when tracing is disabled.
 ///
 /// This struct exists so that `trace_span!` can be used in `let _guard = trace_span!(...).entered();`

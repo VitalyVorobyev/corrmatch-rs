@@ -8,11 +8,10 @@ use crate::candidate::nms::nms_2d;
 use crate::candidate::topk::{Peak, TopK};
 use crate::image::integral::IntegralImages;
 use crate::kernel::scalar::{SsdMaskedScalar, ZnccMaskedScalar};
-use crate::kernel::{Kernel, ScanParams};
+use crate::kernel::{Kernel, ScanParams, ScanRoi};
 use crate::refine::quad1d::quad_peak_offset_1d;
 use crate::refine::quad2d::refine_subpixel_2d;
 use crate::search::{Match, MatchConfig, Metric};
-use crate::trace::{trace_event, trace_span};
 use crate::util::math::wrap_deg;
 use crate::util::{CorrMatchError, CorrMatchResult};
 use crate::ImageView;
@@ -509,7 +508,12 @@ pub(crate) fn refine_to_finer_level_unmasked_zncc_integral(
             None => continue,
         };
         let peaks = ZnccUnmasked::scan_roi_integral(
-            image, plan, 0, roi.0, roi.1, roi.2, roi.3, params, integrals,
+            image,
+            plan,
+            0,
+            ScanRoi::new(roi.0, roi.1, roi.2, roi.3),
+            params,
+            integrals,
         )?;
         all_peaks.extend(peaks);
     }
