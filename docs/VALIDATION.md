@@ -1,9 +1,9 @@
 # Synthetic validation
 
 CorrMatch ships a synthetic validation suite under `synthetic_cases/` plus an
-integration test runner (`tests/synthetic_validation.rs`). The goal is to
-validate end-to-end correctness (coarse search + refinement) against known
-ground truth.
+integration test runner (`crates/corrmatch/tests/synthetic_validation.rs`).
+The goal is to validate end-to-end correctness (coarse search + refinement)
+against known ground truth.
 
 ## How to run
 

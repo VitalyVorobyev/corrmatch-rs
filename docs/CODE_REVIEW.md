@@ -6,21 +6,53 @@
 
 ---
 
-## Status update (2026-01-31)
+## Status update (2026-04-15) — REVIEW.md supersedes this document
 
-This document is kept as a historical review. Several items below have since been fixed.
+This document is retained as a historical record. **REVIEW.md** (repo root) is
+the authoritative tracker for all open work. All items below have been triaged
+against REVIEW.md findings. See the per-item notes under each heading.
 
-Addressed since 2026-01-11:
+Addressed since 2026-01-11 (original 2026-01-31 update):
 - Rotation casting UB: fixed by clamping source coordinates before casting.
 - Config validation: `CompileConfig::validate()` and `MatchConfig::validate()` are implemented and used.
 - Parallel flag behavior: requesting parallel without `rayon` now errors.
 - Masked rotation plans: fixed a correctness bug for large templates by removing `u16` index truncation.
 - Benches: Criterion bench is wired via `harness = false`.
 
-Still relevant / follow-ups:
-- `TemplatePlan::t_prime()` vs `TemplatePlan::zero_mean()` alias is still redundant (API polish).
-- Consolidate repeated numeric thresholds (e.g., `1e-8`) into constants where it helps readability.
-- AngleGrid construction can be simplified to avoid float-accumulation edge cases.
+Additional items resolved in 0.2.0 (2026-04-15):
+- `TemplatePlan::t_prime()` removed; `zero_mean()` is now the only accessor. → **Closed** (REVIEW.md F8).
+- `CompiledTemplate::compile` alias removed; `compile_rotated`/`compile_unrotated` are canonical. → **Closed** (REVIEW.md F10).
+- `ValidCoord` changed from `u16` to `u32`. → **Closed** (REVIEW.md F13).
+- `CompileConfigNoRot::validate()` added. → **Closed** (REVIEW.md F7).
+- Rotation boundary asymmetry documented in both `rotate_u8_bilinear` and `rotate_u8_bilinear_masked`. → **Closed** (REVIEW.md F12).
+- `.expect()` invariant comments added to all kernel/pyramid/rotate sites. → **Closed** (REVIEW.md F17).
+
+Remaining items and their disposition:
+- Item 6 (hardcoded `1e-8` threshold): **WONT_FIX for now** — the value appears
+  in `MatchConfig.min_var_i` defaults and `CompileConfig`, both exposed as public
+  configurable fields. Extracting a private constant would save only a few bytes
+  of source. Track as technical debt if the threshold needs to vary per-metric.
+- Item 7 (OnceLock race): **WONT_FIX** — the race is benign (redundant
+  computation, not data corruption) and `OnceLock::get_or_try_init` requires
+  Rust 1.80+, above the declared MSRV of 1.70. Revisit when MSRV is raised.
+- Item 8 (two-pass template statistics): **WONT_FIX** — template compilation is
+  a one-time cost; single-pass savings are negligible compared to the scan cost.
+- Item 9 (separability documentation): **WONT_FIX** — `quad2d.rs` is
+  `pub(crate)` and the refinement is explicitly labeled as separable 1D+1D. Add
+  a doc comment if this module is ever promoted to `lowlevel`.
+- Item 10 (AngleGrid float accumulation): **WONT_FIX** — the accumulation loop
+  was audited and the off-by-one risk is bounded by the integer cast ceiling.
+  An algebraic formula would be equivalent but requires floating-point division
+  followed by a ceil, which has the same edge cases. The loop is deterministic
+  for any step value that divides the range evenly.
+- Item 11 (missing documentation): **Partially addressed** — coordinate system
+  documented on `ImageView`. ZNCC/SSD score semantics documented on `Metric`.
+  Remaining gaps (precision limits) are WONT_FIX as they are implementation
+  detail, not API contract.
+- Item 12 (error context loss in parallel): **WONT_FIX** — the angle_idx is
+  logged via tracing when the `tracing` feature is enabled. Adding it to the
+  error variant would change the public `CorrMatchError` type; deferred to a
+  future minor version if demand arises.
 
 ## Executive Summary
 

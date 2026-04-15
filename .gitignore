@@ -14,6 +14,7 @@ __pycache__/
 dist/
 *.whl
 
-# Local PyO3 build artifacts (should be built via maturin)
-corrmatch-py/python/corrmatch/_corrmatch*.so
-corrmatch-py/python/corrmatch/_corrmatch*.pyd
+# Local PyO3 build artifacts (should be built via maturin, never committed)
+crates/corrmatch-py/python/corrmatch/_corrmatch*.so
+crates/corrmatch-py/python/corrmatch/_corrmatch*.pyd
+crates/corrmatch-py/python/corrmatch/_corrmatch*.dylib

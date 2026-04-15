@@ -37,10 +37,11 @@ cargo doc --no-deps --workspace
 ## Architecture
 
 ### Workspace Structure
-- `src/` - Main library crate
-- `corrmatch-cli/` - JSON-driven CLI tool
-- `tests/` - Integration tests
-- `benches/` - Criterion benchmarks
+- `crates/corrmatch/src/` - Main library crate
+- `crates/corrmatch-cli/` - JSON-driven CLI tool
+- `crates/corrmatch/tests/` - Integration tests
+- `crates/corrmatch/benches/` - Criterion benchmarks
+- `synthetic_cases/` - Synthetic test case data (repo root)
 - `tools/synth_cases/` - Python synthetic test case generator
 
 ### Core Matching Flow
@@ -51,13 +52,13 @@ cargo doc --no-deps --workspace
 4. **Result**: `Match { x, y, angle_deg, score }`
 
 ### Key Modules
-- `src/bank/` - Compiled template assets and rotation banks (`CompileConfig`, `CompiledTemplate`)
-- `src/search/` - Coarse-to-fine matching pipeline (`Matcher`, `MatchConfig`)
-- `src/kernel/` - Score evaluation kernels (ZNCC, SSD with scalar/rayon variants)
-- `src/image/` - `ImageView` (borrowed 2D view with stride), `ImagePyramid`
-- `src/template/` - Template representation, rotation, and plans
-- `src/refine/` - Subpixel (2D quadratic) and subangle (1D quadratic) refinement
-- `src/lowlevel.rs` - Advanced building blocks for custom pipelines
+- `crates/corrmatch/src/bank/` - Compiled template assets and rotation banks (`CompileConfig`, `CompiledTemplate`)
+- `crates/corrmatch/src/search/` - Coarse-to-fine matching pipeline (`Matcher`, `MatchConfig`)
+- `crates/corrmatch/src/kernel/` - Score evaluation kernels (ZNCC, SSD with scalar/rayon variants)
+- `crates/corrmatch/src/image/` - `ImageView` (borrowed 2D view with stride), `ImagePyramid`
+- `crates/corrmatch/src/template/` - Template representation, rotation, and plans
+- `crates/corrmatch/src/refine/` - Subpixel (2D quadratic) and subangle (1D quadratic) refinement
+- `crates/corrmatch/src/lowlevel.rs` - Advanced building blocks for custom pipelines
 
 ### Feature Flags
 - `rayon` - Parallel search execution (opt-in via `MatchConfig.parallel`)

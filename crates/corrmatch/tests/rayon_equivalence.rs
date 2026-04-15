@@ -1,0 +1,81 @@
+#![cfg(feature = "rayon")]
+
+use corrmatch::lowlevel::rotate_u8_bilinear_masked;
+use corrmatch::{
+    CompileConfig, CompiledTemplate, ImageView, MatchConfig, Matcher, Metric, RotationMode,
+    Template,
+};
+
+fn make_template(width: usize, height: usize) -> Vec<u8> {
+    let mut data = Vec::with_capacity(width * height);
+    for y in 0..height {
+        for x in 0..width {
+            let value = ((x * 11) ^ (y * 3) ^ (x * y)) & 0xFF;
+            data.push(value as u8);
+        }
+    }
+    data
+}
+
+#[test]
+fn parallel_matches_sequential_rotation_enabled() {
+    let tpl_width = 48;
+    let tpl_height = 36;
+    let tpl_data = make_template(tpl_width, tpl_height);
+    let template = Template::new(tpl_data.clone(), tpl_width, tpl_height).unwrap();
+
+    let angle_deg = 30.0f32;
+    let tpl_view = ImageView::from_slice(&tpl_data, tpl_width, tpl_height).unwrap();
+    let (rotated, mask) = rotate_u8_bilinear_masked(tpl_view, angle_deg, 0);
+
+    let img_width = 180;
+    let img_height = 140;
+    let x0 = 50;
+    let y0 = 40;
+    let mut image = vec![0u8; img_width * img_height];
+    for y in 0..tpl_height {
+        for x in 0..tpl_width {
+            let idx = y * tpl_width + x;
+            if mask[idx] == 1 {
+                image[(y0 + y) * img_width + (x0 + x)] = rotated.data()[idx];
+            }
+        }
+    }
+
+    let mut compile_cfg = CompileConfig::default();
+    compile_cfg.max_levels = 2;
+    compile_cfg.coarse_step_deg = 30.0;
+    compile_cfg.min_step_deg = 15.0;
+    compile_cfg.fill_value = 0;
+    compile_cfg.precompute_coarsest = true;
+    let compiled = CompiledTemplate::compile_rotated(&template, compile_cfg.clone()).unwrap();
+
+    let mut base_cfg = MatchConfig::default();
+    base_cfg.metric = Metric::Zncc;
+    base_cfg.rotation = RotationMode::Enabled;
+    base_cfg.max_image_levels = 2;
+    base_cfg.beam_width = 6;
+    base_cfg.per_angle_topk = 3;
+    base_cfg.roi_radius = 6;
+    base_cfg.nms_radius = 4;
+    base_cfg.angle_half_range_steps = 1;
+
+    let image_view = ImageView::from_slice(&image, img_width, img_height).unwrap();
+    let mut seq_cfg = base_cfg.clone();
+    seq_cfg.parallel = false;
+    let mut par_cfg = base_cfg;
+    par_cfg.parallel = true;
+    let seq_matcher = Matcher::new(compiled).with_config(seq_cfg);
+    let par_matcher =
+        Matcher::new(CompiledTemplate::compile_rotated(&template, compile_cfg).unwrap())
+            .with_config(par_cfg);
+
+    let seq = seq_matcher.match_image(image_view).unwrap();
+    let par = par_matcher.match_image(image_view).unwrap();
+
+    let tol = 1e-6;
+    assert!((seq.x - par.x).abs() <= tol);
+    assert!((seq.y - par.y).abs() <= tol);
+    assert!((seq.angle_deg - par.angle_deg).abs() <= tol);
+    assert!((seq.score - par.score).abs() <= tol);
+}

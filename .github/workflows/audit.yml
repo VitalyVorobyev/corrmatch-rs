@@ -15,4 +15,3 @@ jobs:
       - uses: actions-rust-lang/audit@v1
         with:
           createIssues: false
-          ignore: RUSTSEC-2024-0436

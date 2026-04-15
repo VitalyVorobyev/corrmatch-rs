@@ -2,14 +2,15 @@
 
 This is a practical checklist for cutting a tagged release and publishing both:
 - the Rust crate `corrmatch` to crates.io
-- the Python package `corrmatch` (from `corrmatch-py/`) to PyPI
+- the Python package `corrmatch` (from `crates/corrmatch-py/`) to PyPI
 
 ## 1) Prep
 
-- Bump versions:
-  - `Cargo.toml` (`corrmatch`)
-  - `corrmatch-cli/Cargo.toml` (if shipping the CLI crate)
-  - `corrmatch-py/Cargo.toml` + `corrmatch-py/pyproject.toml`
+- Bump versions in all three crates and the Python project file:
+  - `crates/corrmatch/Cargo.toml`
+  - `crates/corrmatch-cli/Cargo.toml`
+  - `crates/corrmatch-py/Cargo.toml`
+  - `crates/corrmatch-py/pyproject.toml`
 - Update `CHANGELOG.md` for the release version/date.
 - Run quality gates:
 
@@ -55,15 +56,15 @@ Local wheel build + tests:
 
 ```bash
 python -m pip install -U maturin pytest numpy pillow
-maturin build --release -m corrmatch-py/Cargo.toml --out dist
+maturin build --release -m crates/corrmatch-py/Cargo.toml --out dist
 python -m pip install dist/*.whl
-python -m pytest corrmatch-py/python/tests
+python -m pytest crates/corrmatch-py/python/tests
 ```
 
 Publishing (one option):
 
 ```bash
-maturin publish --release -m corrmatch-py/Cargo.toml
+maturin publish --release -m crates/corrmatch-py/Cargo.toml
 ```
 
 Notes:

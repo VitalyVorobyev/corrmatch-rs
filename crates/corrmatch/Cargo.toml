@@ -1,0 +1,47 @@
+[package]
+name = "corrmatch"
+version = "0.2.0"
+description = "CPU-first template matching with ZNCC/SSD and coarse-to-fine pyramid search"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+documentation = "https://docs.rs/corrmatch"
+readme = "README.md"
+categories = ["algorithms", "multimedia::images", "science"]
+keywords = ["template-matching", "image-processing", "zncc", "pyramid", "rotation"]
+include = [
+    "src/**",
+    "tests/**",
+    "benches/**",
+    "README.md",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "performance.md",
+    "LICENSE",
+]
+
+[dependencies]
+thiserror = "1"
+rayon = { version = "1", optional = true }
+wide = { version = "1", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg"] }
+tracing = { version = "0.1", optional = true }
+
+[dev-dependencies]
+rand = "0.9"
+criterion = "0.8"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = []
+rayon = ["dep:rayon"]
+simd = ["dep:wide"]
+image-io = ["dep:image"]
+tracing = ["dep:tracing"]
+
+[[bench]]
+name = "corrmatch"
+harness = false
