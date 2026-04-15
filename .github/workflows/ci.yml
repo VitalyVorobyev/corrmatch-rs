@@ -46,7 +46,7 @@ jobs:
         run: cargo doc --no-deps --workspace
 
   msrv:
-    name: MSRV check (rust-version = 1.70)
+    name: MSRV check (rust-version = 1.82)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.70"
+          toolchain: "1.82"
 
       - name: cargo check (default features)
         run: cargo check --workspace

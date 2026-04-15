@@ -238,13 +238,29 @@ class TestMatcherReuse:
     """Tests for Arc-backed matcher reuse (F11)."""
 
     def test_matcher_reusable_after_first_call(self):
-        """Test that compiled.matcher() can be called multiple times (F11 Arc-backed)."""
-        image = np.zeros((128, 128), dtype=np.uint8)
-        template = np.random.randint(50, 200, (24, 24), dtype=np.uint8)
-        image[50:74, 50:74] = template
+        """Test that compiled.matcher() can be called multiple times (F11 Arc-backed).
+
+        The test constructs a deterministic image/template pair so the
+        coarse-pyramid search is stable across platforms and Python versions.
+        An un-seeded random template plus max_levels=4 previously produced a
+        3×3 template at the coarsest level, where ZNCC is noise-sensitive
+        and the test became flaky on macOS/Windows.
+        """
+        rng = np.random.default_rng(42)
+        # Moderately sized template with well-distributed intensities and
+        # a surrounding gradient so the coarsest level has usable variance.
+        template = rng.integers(60, 220, size=(40, 40), dtype=np.uint8)
+        image = np.zeros((192, 192), dtype=np.uint8)
+        # Non-zero background so min_var_i thresholding doesn't mask the
+        # entire search space and the matcher must actually discriminate.
+        image[:] = (
+            np.linspace(20, 80, 192, dtype=np.float32)[:, None]
+            .astype(np.uint8)
+        )
+        image[50:90, 50:90] = template
 
         tpl = corrmatch.Template(template)
-        compiled = tpl.compile_no_rotation(max_levels=4)
+        compiled = tpl.compile_no_rotation(max_levels=3)
 
         # First matcher — default config
         matcher1 = compiled.matcher(corrmatch.MatchConfig(beam_width=4))

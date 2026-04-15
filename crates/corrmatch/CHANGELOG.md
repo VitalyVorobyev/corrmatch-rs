@@ -32,6 +32,11 @@ No entries yet. New changes are recorded here until the next version tag is cut.
 
 - **Version bumped to `0.2.0`** across all three crates and `pyproject.toml`.
 
+- **MSRV bumped from 1.70 to 1.82.** The Cargo.lock file is now written in
+  v4 format (stabilized in Rust 1.78), which older toolchains cannot parse.
+  1.82 is still widely available and keeps room for recent ecosystem
+  features.
+
 ### Added
 
 - `CompileConfigNoRot::validate()` method (F7).
