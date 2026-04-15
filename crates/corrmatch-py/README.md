@@ -139,7 +139,7 @@ Angle convention: positive angles are **clockwise** (x right, y down).
 ## Building
 
 Requires:
-- Rust toolchain (1.82+)
+- Rust toolchain (1.88+)
 - Python 3.11+
 - maturin (`pip install maturin`)
 

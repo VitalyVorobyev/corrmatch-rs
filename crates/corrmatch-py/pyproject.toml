@@ -50,3 +50,11 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["matplotlib", "matplotlib.*", "PIL", "PIL.*"]
 ignore_missing_imports = true
+
+# corrmatch.viz is an optional visualization helper. Its numpy signatures
+# use the loose `np.ndarray` form that stricter numpy stubs (notably on
+# Python 3.10) flag under --strict. The core corrmatch.* modules remain
+# fully strict-typed; viz-only type looseness is not worth the churn.
+[[tool.mypy.overrides]]
+module = ["corrmatch.viz"]
+disable_error_code = ["type-arg", "no-untyped-call", "no-any-return"]
