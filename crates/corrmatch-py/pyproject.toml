@@ -1,0 +1,52 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "corrmatch"
+version = "0.2.0"
+description = "CPU-first template matching library for grayscale images"
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Vitaly Vorobyev" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+]
+keywords = ["template-matching", "image-processing", "computer-vision", "zncc", "ssd"]
+
+[project.urls]
+Homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+Repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
+Documentation = "https://docs.rs/corrmatch"
+"Bug Tracker" = "https://github.com/VitalyVorobyev/corrmatch-rs/issues"
+Changelog = "https://github.com/VitalyVorobyev/corrmatch-rs/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.7", "Pillow>=10.0"]
+
+[project.scripts]
+corrmatch-viz = "corrmatch.viz:main"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "corrmatch._corrmatch"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["matplotlib", "matplotlib.*", "PIL", "PIL.*"]
+ignore_missing_imports = true

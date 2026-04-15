@@ -18,7 +18,7 @@ Initial releases emphasize scalar kernels and clean APIs for extension.
 - Every public item must have rustdoc.
 - Prefer `Result<T, CorrMatchError>` with `thiserror`.
 - No allocations in hot loops unless justified.
-- No unsafe outside `src/kernel/simd.rs`; any unsafe must be documented with invariants and tested.
+- No unsafe outside `crates/corrmatch/src/kernel/simd.rs`; any unsafe must be documented with invariants and tested.
 
 ## Testing standards
 - Unit tests for math/refinement correctness.
@@ -26,7 +26,7 @@ Initial releases emphasize scalar kernels and clean APIs for extension.
 - Add regression tests when bugs are found.
 
 ## Benchmark standards
-- Criterion benches live in `benches/`, must be reproducible and documented.
+- Criterion benches live in `crates/corrmatch/benches/`, must be reproducible and documented.
 
 ## Feature policy
 - Default build must work with `--no-default-features`.
