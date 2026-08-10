@@ -9,7 +9,7 @@ repository = "https://github.com/VitalyVorobyev/corrmatch-rs"
 homepage = "https://vitalyvorobyev.github.io/corrmatch-rs/"
 documentation = "https://vitalyvorobyev.github.io/corrmatch-rs/"
 rust-version = "1.91"
-version = "0.2.3"
+version = "0.2.4"
 
 [workspace.dependencies]
 thiserror = "1"
