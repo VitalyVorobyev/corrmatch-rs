@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "corrmatch"
-version = "0.2.1"
+version = "0.2.3"
 description = "CPU-first template matching library for grayscale images"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
