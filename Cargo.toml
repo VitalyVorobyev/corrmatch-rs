@@ -29,4 +29,4 @@ numpy = "0.29"
 ndarray = "0.17"
 pyo3-build-config = "0.29"
 
-corrmatch = { version = "0.2", path = "crates/corrmatch", features = ["image-io", "tracing"] }
+corrmatch = { version = "0.2", path = "crates/corrmatch", features = ["image-io", "tracing", "rayon", "simd"] }
