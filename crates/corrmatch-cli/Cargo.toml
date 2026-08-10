@@ -1,6 +1,6 @@
 [package]
 name = "corrmatch-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "CLI tool for corrmatch (JSON config driven)"
 edition.workspace = true
 license.workspace = true

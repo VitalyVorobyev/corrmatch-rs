@@ -3,7 +3,7 @@ use corrmatch::lowlevel::{
 };
 use corrmatch::ImageView;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 fn brute_force_best(image: ImageView<'_, u8>, tpl: &MaskedTemplatePlan) -> (usize, usize, f64) {
     let tpl_w = tpl.width();
