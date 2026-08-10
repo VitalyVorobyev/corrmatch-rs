@@ -14,6 +14,7 @@
 [![crates.io](https://img.shields.io/crates/v/corrmatch.svg)](https://crates.io/crates/corrmatch)
 [![docs.rs](https://img.shields.io/docsrs/corrmatch)](https://docs.rs/corrmatch)
 [![license](https://img.shields.io/crates/l/corrmatch.svg)](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.91-blue.svg)](https://blog.rust-lang.org/2025/10/30/Rust-1.91.0/)
 
 CorrMatch is a CPU-first template matching library for grayscale images. It
 implements a coarse-to-fine pyramid search with optional rotation and two

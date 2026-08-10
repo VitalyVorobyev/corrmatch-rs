@@ -1,12 +1,12 @@
 [package]
 name = "corrmatch-cli"
-version = "0.2.1"
+version.workspace = true
 description = "CLI tool for corrmatch (JSON config driven)"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-homepage = "https://github.com/VitalyVorobyev/corrmatch-rs"
+homepage.workspace = true
 readme = "README.md"
 include = [
     "src/**",
@@ -17,9 +17,9 @@ include = [
 ]
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-corrmatch = { version = "0.2.0", path = "../corrmatch", features = ["image-io", "tracing"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+corrmatch.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
