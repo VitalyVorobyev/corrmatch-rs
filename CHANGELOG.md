@@ -6,6 +6,10 @@ No entries yet. New changes are recorded here until the next version tag is cut.
 
 ---
 
+## 0.2.1 - 2026-08-10
+
+Chore release: update dependencies
+
 ## 0.2.0 - 2026-04-15
 
 ### Breaking Changes

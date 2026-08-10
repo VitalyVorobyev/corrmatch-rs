@@ -23,7 +23,7 @@ fn to_py_err(err: CorrMatchError) -> PyErr {
 }
 
 /// Match result containing position, angle, and score.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct Match {
     /// Top-left x coordinate of the template placement.
@@ -62,7 +62,7 @@ impl From<RustMatch> for Match {
 }
 
 /// Configuration for compiling a template with rotation support.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct CompileConfig {
     inner: RustCompileConfig,
@@ -145,7 +145,7 @@ impl CompileConfig {
 }
 
 /// Configuration for the matching process.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct MatchConfig {
     inner: RustMatchConfig,

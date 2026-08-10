@@ -1,6 +1,6 @@
 [package]
 name = "corrmatch-py"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python bindings for corrmatch template matching library"
 edition.workspace = true
 license.workspace = true
@@ -16,10 +16,10 @@ path = "src/lib.rs"
 doc = false
 
 [dependencies]
-corrmatch = { version = "0.2.0", path = "../corrmatch", features = ["image-io", "rayon"] }
-pyo3 = { version = "0.27", features = ["extension-module", "abi3-py310"] }
-numpy = "0.27"
-ndarray = "0.16"
+corrmatch = { version = "0.2", path = "../corrmatch", features = ["image-io", "rayon"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py310"] }
+numpy = "0.29"
+ndarray = "0.17"
 
 [build-dependencies]
-pyo3-build-config = "0.27"
+pyo3-build-config = "0.29"
