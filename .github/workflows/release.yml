@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - with:
+        with:
           lfs: true
 
       - uses: dtolnay/rust-toolchain@stable
